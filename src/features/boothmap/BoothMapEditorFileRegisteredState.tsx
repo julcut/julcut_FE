@@ -974,7 +974,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           <input
             ref={replaceFileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];

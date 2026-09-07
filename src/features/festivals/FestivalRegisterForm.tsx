@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useKakaoLoader } from "react-kakao-maps-sdk";
+import { AttachmentField } from "@/components/ui/AttachmentField";
 import { Bottombar } from "@/components/ui/Bottombar";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +14,11 @@ import { FormSection } from "@/components/ui/FormSection";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
-import { createFestival, searchFestivalSeries } from "@/features/festivals/api";
+import {
+  createFestival,
+  createFestivalWithMap,
+  searchFestivalSeries,
+} from "@/features/festivals/api";
 import type {
   FestivalSeriesSearchResult,
   FestivalVisitorCountInputMode,
@@ -30,6 +35,12 @@ import { SearchDialog, type SearchDialogResult, type SearchDialogState } from ".
 import { VisitorCountModeField } from "./VisitorCountModeField";
 import { canCreateFestival } from "@/features/auth/admin/types";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
+
+/** 서버(MapImagePreparationService)가 받는 배치도 형식. webp는 거부된다. */
+const MAP_IMAGE_ACCEPT = "image/png,image/jpeg";
+const MAP_IMAGE_MIME_TYPES = ["image/png", "image/jpeg"];
+/** application.yml의 app.map.image.max-file-size 기본값과 맞춘다. */
+const MAP_IMAGE_MAX_BYTES = 50 * 1024 * 1024;
 
 export function FestivalRegisterForm() {
   const router = useRouter();
@@ -50,6 +61,8 @@ export function FestivalRegisterForm() {
   const [visitorCountInputMode, setVisitorCountInputMode] =
     useState<FestivalVisitorCountInputMode>("DAILY");
   const [formError, setFormError] = useState<string | null>(null);
+  const [mapImage, setMapImage] = useState<File | null>(null);
+  const [mapImageError, setMapImageError] = useState<string | null>(null);
 
   const [festivalSearchOpen, setFestivalSearchOpen] = useState(false);
   const [festivalSearchState, setFestivalSearchState] = useState<SearchDialogState>("default");
@@ -154,17 +167,40 @@ export function FestivalRegisterForm() {
         visitorCountInputMode,
       };
 
+      // 배치도를 첨부했으면 multipart로 함께 올린다. 서버는 이 경로에서만 AI 분석을
+      // 대기열에 넣으므로(enqueueInitial), 첨부 여부가 곧 분석 여부다.
+      if (mapImage) {
+        const created = await createFestivalWithMap(request, mapImage);
+        return { festival: created.festival, analyzing: true };
+      }
       const festival = await createFestival(request);
-      return festival;
+      return { festival, analyzing: false };
     },
-    onSuccess: (festival) => {
+    onSuccess: ({ festival, analyzing }) => {
       // 등록 직후 부스맵으로 넘어가므로, 이동한 화면에서 결과를 알 수 있게 토스트를 남긴다.
       toast.success("축제를 등록했습니다.", {
-        description: "이어서 부스 위치를 찍어 주세요.",
+        description: analyzing
+          ? "AI가 첨부한 배치도에서 부스를 찾고 있습니다."
+          : "이어서 부스 위치를 찍어 주세요.",
       });
       router.push(`/console/festivals/${festival.festivalId}/boothmap`);
     },
   });
+
+  function selectMapImage(file: File) {
+    if (!MAP_IMAGE_MIME_TYPES.includes(file.type)) {
+      setMapImage(null);
+      setMapImageError("PNG 또는 JPG 이미지만 첨부할 수 있습니다.");
+      return;
+    }
+    if (file.size > MAP_IMAGE_MAX_BYTES) {
+      setMapImage(null);
+      setMapImageError("배치도 이미지는 50MB까지 첨부할 수 있습니다.");
+      return;
+    }
+    setMapImage(file);
+    setMapImageError(null);
+  }
 
   function handleSubmitClick() {
     if (name.trim().length === 0) {
@@ -303,6 +339,21 @@ export function FestivalRegisterForm() {
 
       <FormSection label="방문 인원 집계 방식">
         <VisitorCountModeField value={visitorCountInputMode} onChange={setVisitorCountInputMode} />
+      </FormSection>
+
+      <FormSection label="축제부스지도 첨부">
+        <AttachmentField
+          file={mapImage}
+          onSelect={selectMapImage}
+          onRemove={() => {
+            setMapImage(null);
+            setMapImageError(null);
+          }}
+          accept={MAP_IMAGE_ACCEPT}
+          description="배치도를 첨부하면 AI가 부스 위치를 찾아 부스맵에 표시합니다. 나중에 부스맵 화면에서 첨부해도 됩니다. (PNG·JPG, 50MB 이하)"
+          error={mapImageError}
+          disabled={createMutation.isPending}
+        />
       </FormSection>
 
       {createMutation.isError ? (
