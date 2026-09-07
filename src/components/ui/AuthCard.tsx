@@ -11,7 +11,7 @@ export interface AuthCardProps {
  */
 export function AuthCard({ title, children }: AuthCardProps) {
   return (
-    <div className="w-[480px] rounded-2xl bg-white p-8">
+    <div className="w-[480px] max-w-full rounded-2xl bg-white p-5 sm:p-8">
       <h1 className="heading-regular text-center text-zinc-950">{title}</h1>
       {children}
     </div>
