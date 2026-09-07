@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useKakaoLoader } from "react-kakao-maps-sdk";
 import { Bottombar } from "@/components/ui/Bottombar";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormSection } from "@/components/ui/FormSection";
@@ -157,6 +158,10 @@ export function FestivalRegisterForm() {
       return festival;
     },
     onSuccess: (festival) => {
+      // 등록 직후 부스맵으로 넘어가므로, 이동한 화면에서 결과를 알 수 있게 토스트를 남긴다.
+      toast.success("축제를 등록했습니다.", {
+        description: "이어서 부스 위치를 찍어 주세요.",
+      });
       router.push(`/console/festivals/${festival.festivalId}/boothmap`);
     },
   });
