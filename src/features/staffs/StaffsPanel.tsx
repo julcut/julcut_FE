@@ -9,8 +9,10 @@ import { Bottombar } from "@/components/ui/Bottombar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { TemporaryPasswordCard } from "@/components/ui/TemporaryPasswordCard";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { createFieldStaff, deleteFieldStaffBulk, getFieldStaffList } from "./api";
+import type { CreateFieldStaffResult } from "./types";
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -26,6 +28,8 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // 임시 비밀번호는 생성 응답에서만 내려오므로 화면에 남겨 두고 직접 전달하게 한다.
+  const [created, setCreated] = useState<CreateFieldStaffResult | null>(null);
 
   const staffListQuery = useQuery({
     queryKey: ["field-staff", festivalId],
@@ -35,7 +39,8 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
 
   const createMutation = useMutation({
     mutationFn: () => createFieldStaff(festivalId, { loginId, name, phoneNumber }),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setCreated(result);
       setName("");
       setPhoneNumber("");
       setLoginId(`staff-${crypto.randomUUID().slice(0, 8)}`);
@@ -76,10 +81,19 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
         <section className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">스태프 추가</p>
 
+          {created ? (
+            <TemporaryPasswordCard
+              title={`${created.name}(${created.loginId}) 스태프 계정이 생성되었습니다.`}
+              temporaryPassword={created.temporaryPassword}
+              warning="임시 비밀번호는 지금만 확인할 수 있습니다. 스태프에게 아이디와 함께 바로 전달해주세요."
+            />
+          ) : null}
+
           <form
             className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
+              setCreated(null);
               createMutation.mutate();
             }}
           >

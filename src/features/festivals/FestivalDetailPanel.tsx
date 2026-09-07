@@ -19,7 +19,9 @@ import type {
   FestivalLocationRequest,
   FestivalLocationResponse,
   FestivalSeriesSearchResult,
+  FestivalVisitorCountInputMode,
 } from "./types";
+import { VisitorCountModeField } from "./VisitorCountModeField";
 
 export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const router = useRouter();
@@ -31,7 +33,9 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const [detailAddress, setDetailAddress] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
-  const [dateError, setDateError] = useState<string | null>(null);
+  const [visitorCountInputMode, setVisitorCountInputMode] =
+    useState<FestivalVisitorCountInputMode | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [festivalSearchOpen, setFestivalSearchOpen] = useState(false);
   const [festivalSearchState, setFestivalSearchState] = useState<SearchDialogState>("default");
@@ -81,12 +85,16 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         longitude: location.longitude ?? undefined,
         boundaryGeometry: location.boundaryGeometry ?? undefined,
       }));
+      const selectedVisitorCountInputMode =
+        visitorCountInputMode ??
+        (festival.visitorCountInputMode === "UNSET" ? undefined : festival.visitorCountInputMode);
       return updateFestival(festivalId, {
         name: name ?? festival.festivalName ?? "",
         description: description ?? festival.description ?? "",
         locations,
         startDate: toIsoDate(startDate ?? toDisplayDate(festival.startDate ?? "")),
         endDate: toIsoDate(endDate ?? toDisplayDate(festival.endDate ?? "")),
+        visitorCountInputMode: selectedVisitorCountInputMode,
       });
     },
     onSuccess: () => {
@@ -96,6 +104,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       setDetailAddress(null);
       setStartDate(null);
       setEndDate(null);
+      setVisitorCountInputMode(null);
       queryClient.invalidateQueries({ queryKey: ["managed-festival", festivalId] });
       queryClient.invalidateQueries({ queryKey: ["managed-festivals"] });
     },
@@ -117,30 +126,37 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
   const displayStartDate = startDate ?? toDisplayDate(festival.startDate ?? "");
   const displayEndDate = endDate ?? toDisplayDate(festival.endDate ?? "");
+  const displayVisitorCountInputMode =
+    visitorCountInputMode ??
+    (festival.visitorCountInputMode === "UNSET" ? null : festival.visitorCountInputMode);
 
   function handleEditClick() {
     const updatedName = (name ?? festival?.festivalName ?? "").trim();
     const updatedDescription = (description ?? festival?.description ?? "").trim();
     if (updatedName.length < 2 || updatedName.length > 100) {
-      setDateError("축제명은 2~100자로 입력해 주세요.");
+      setFormError("축제명은 2~100자로 입력해 주세요.");
       return;
     }
     if (!updatedDescription || updatedDescription.length > 1000) {
-      setDateError("축제 내용은 1~1000자로 입력해 주세요.");
+      setFormError("축제 내용은 1~1000자로 입력해 주세요.");
       return;
     }
     if (
       !DATE_DISPLAY_PATTERN.test(displayStartDate) ||
       !DATE_DISPLAY_PATTERN.test(displayEndDate)
     ) {
-      setDateError("날짜는 YYYY.mm.dd 형식으로 입력해 주세요.");
+      setFormError("날짜는 YYYY.mm.dd 형식으로 입력해 주세요.");
       return;
     }
     if (toIsoDate(displayStartDate) > toIsoDate(displayEndDate)) {
-      setDateError("종료날짜는 시작날짜보다 빠를 수 없습니다.");
+      setFormError("종료날짜는 시작날짜보다 빠를 수 없습니다.");
       return;
     }
-    setDateError(null);
+    if (!displayVisitorCountInputMode) {
+      setFormError("방문 인원 집계 방식을 선택해 주세요.");
+      return;
+    }
+    setFormError(null);
     setEditDialogOpen(true);
   }
 
@@ -203,7 +219,13 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             />
           </div>
 
-          {dateError ? <p className="body-caption text-error">{dateError}</p> : null}
+          <VisitorCountModeField
+            label="방문 인원 집계 방식"
+            value={displayVisitorCountInputMode}
+            onChange={setVisitorCountInputMode}
+          />
+
+          {formError ? <p className="body-caption text-error">{formError}</p> : null}
         </div>
 
         <div className="relative min-h-[360px] xl:col-span-2 xl:min-h-[calc(100vh-252px)] overflow-hidden rounded-lg bg-zinc-100">
@@ -212,7 +234,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             type="button"
             variant="primary"
             icon={<Pencil1Icon />}
-            className="absolute top-4 right-4 shadow-md"
+            className="absolute top-4 right-4 z-10 shadow-md"
             onClick={() => router.push(`/console/festivals/${festivalId}/boothmap`)}
           >
             부스지도 수정

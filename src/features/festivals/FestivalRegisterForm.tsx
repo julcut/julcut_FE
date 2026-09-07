@@ -13,7 +13,10 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
 import { createFestival, searchFestivalSeries } from "@/features/festivals/api";
-import type { FestivalSeriesSearchResult } from "@/features/festivals/types";
+import type {
+  FestivalSeriesSearchResult,
+  FestivalVisitorCountInputMode,
+} from "@/features/festivals/types";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import {
   createInitialLocationDrafts,
@@ -23,6 +26,7 @@ import {
   type LocationDraft,
 } from "./locationDraft";
 import { SearchDialog, type SearchDialogResult, type SearchDialogState } from "./SearchDialog";
+import { VisitorCountModeField } from "./VisitorCountModeField";
 import { canCreateFestival } from "@/features/auth/admin/types";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -41,6 +45,9 @@ export function FestivalRegisterForm() {
   const [primaryKey, setPrimaryKey] = useState(() => locations[0].key);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // 미설정(UNSET)으로 등록되면 결과 리포트를 만들 수 없어 기본값을 일자별로 둔다.
+  const [visitorCountInputMode, setVisitorCountInputMode] =
+    useState<FestivalVisitorCountInputMode>("DAILY");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [festivalSearchOpen, setFestivalSearchOpen] = useState(false);
@@ -143,6 +150,7 @@ export function FestivalRegisterForm() {
         // 디자인에 운영시간 입력이 추가되면 이 기본값을 실제 입력값으로 교체해야 한다.
         operationStartTime: "09:00:00",
         operationEndTime: "18:00:00",
+        visitorCountInputMode,
       };
 
       const festival = await createFestival(request);
@@ -286,6 +294,10 @@ export function FestivalRegisterForm() {
           장소 추가
         </Button>
         {formError ? <p className="body-caption text-error">{formError}</p> : null}
+      </FormSection>
+
+      <FormSection label="방문 인원 집계 방식">
+        <VisitorCountModeField value={visitorCountInputMode} onChange={setVisitorCountInputMode} />
       </FormSection>
 
       {createMutation.isError ? (
