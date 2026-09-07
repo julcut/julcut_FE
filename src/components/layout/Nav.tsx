@@ -38,17 +38,15 @@ function buildDefaultItems(
   role: AdminRole | null | undefined,
   accountKind: AccountKind | null | undefined,
 ): NavItem[] {
+  // 축제를 고르기 전에는 축제별 화면으로 갈 수 없다. 예전에는 여기서
+  // /console/festivals/dashboard 같은 주소를 만들었는데, 이 값들이
+  // [festivalId] 자리에 들어가 존재하지 않는 축제로 매칭되면서 빈 화면만 남았다.
   if (!festivalId) {
     const items: NavItem[] = [];
     if (canCreateFestival(accountKind)) {
       items.push({ label: "축제등록", href: "/console/festivals/new" });
     }
-    items.push(
-      { label: "축제관리", href: "/console/festivals" },
-      { label: "대시보드", href: "/console/festivals/dashboard" },
-      { label: "운영자관리", href: "/console/festivals/operators" },
-      { label: "스태프관리", href: "/console/festivals/staffs" },
-    );
+    items.push({ label: "축제목록", href: "/console" });
     return items;
   }
 
