@@ -1,8 +1,9 @@
 "use client";
 
-import { InfoCircledIcon } from "@radix-ui/react-icons";
+import { Cross2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FestivalVisitorDay } from "./types";
@@ -14,6 +15,12 @@ export interface VisitorCountFormProps {
   initialTotal?: number | null;
   isPending?: boolean;
   onSubmit: (value: number[] | number) => void;
+  /**
+   * 입력을 포기하고 화면을 벗어날 때 호출된다.
+   * 이 폼은 딤 오버레이 + 상단 탭 숨김 상태로 뜨기 때문에,
+   * 브라우저 뒤로가기 말고도 빠져나갈 경로가 반드시 있어야 한다.
+   */
+  onClose?: () => void;
 }
 
 export function VisitorCountForm({
@@ -22,6 +29,7 @@ export function VisitorCountForm({
   initialTotal,
   isPending,
   onSubmit,
+  onClose,
 }: VisitorCountFormProps) {
   const [dailyCounts, setDailyCounts] = useState<string[]>(
     days.map((day) => day.visitorCount?.toString() ?? ""),
@@ -51,18 +59,27 @@ export function VisitorCountForm({
   const valid = mode === "TOTAL" ? totalCount.trim() !== "" : dailyValid;
 
   return (
-    <div className="w-[480px] overflow-hidden rounded-2xl border border-zinc-300 bg-white">
-      <div className="flex items-center justify-center gap-1.5 px-8 py-4">
-        <h2 className="heading-small text-center text-zinc-950">축제 방문 인원</h2>
-        <Tooltip>
-          <TooltipTrigger aria-label="도움말">
-            <InfoCircledIcon className="size-4 text-zinc-400" />
-          </TooltipTrigger>
-          <TooltipContent>방문인원을 입력하면 축제성과를 분석할 수 있어요.</TooltipContent>
-        </Tooltip>
+    <div className="w-[480px] max-w-full overflow-hidden rounded-2xl border border-zinc-300 bg-white">
+      <div className="flex items-center gap-1.5 px-5 py-4 sm:px-8">
+        {/* 좌우 균형을 맞추려 닫기 버튼과 같은 폭의 자리를 왼쪽에 비워 둔다. */}
+        <span aria-hidden className="size-8 shrink-0" />
+        <div className="flex flex-1 items-center justify-center gap-1.5">
+          <h2 className="heading-small text-center text-zinc-950">축제 방문 인원</h2>
+          <Tooltip>
+            <TooltipTrigger aria-label="도움말">
+              <InfoCircledIcon className="size-4 text-zinc-400" />
+            </TooltipTrigger>
+            <TooltipContent>방문인원을 입력하면 축제성과를 분석할 수 있어요.</TooltipContent>
+          </Tooltip>
+        </div>
+        {onClose ? (
+          <IconButton aria-label="닫기" variant="ghost" icon={<Cross2Icon />} onClick={onClose} />
+        ) : (
+          <span aria-hidden className="size-8 shrink-0" />
+        )}
       </div>
 
-      <div className="flex flex-col gap-6 border-t border-zinc-200 p-8">
+      <div className="flex flex-col gap-6 border-t border-zinc-200 p-5 sm:p-8">
         <div className="flex flex-col gap-5">
           {mode === "TOTAL" ? (
             <Input
@@ -99,7 +116,7 @@ export function VisitorCountForm({
           ) : null}
         </div>
 
-        <div>
+        <div className="flex flex-col gap-2">
           <Button
             type="button"
             size="lg"
@@ -109,6 +126,18 @@ export function VisitorCountForm({
           >
             {isPending ? "저장 중..." : "입력하기"}
           </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              className="w-full"
+              disabled={isPending}
+              onClick={onClose}
+            >
+              나중에 입력
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>

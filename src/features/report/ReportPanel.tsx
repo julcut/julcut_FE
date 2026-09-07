@@ -48,7 +48,7 @@ function TextSummary({ summary }: { summary: FestivalReportTextSummary }) {
   ];
   if (groups.every(({ items }) => items.length === 0)) return null;
   return (
-    <div className="grid grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
       {groups.map(({ title, items }) => (
         <Panel key={title} title={title}>
           {items.length ? (
@@ -139,7 +139,7 @@ function PerformanceView({ report }: { report: FestivalReportPerformance }) {
           ? `${metrics.festivalName}의 성과를 확인해 보세요.`
           : `이전 축제보다 방문객이 ${Math.abs(visitors.changeRatePercent).toLocaleString()}% ${directionLabel}${visitors.direction === "FLAT" ? "입니다" : "했습니다"}`}
       </h1>
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           label="총 관광객수"
           value={`${visitors.current.toLocaleString()} 명`}
@@ -172,7 +172,7 @@ function PerformanceView({ report }: { report: FestivalReportPerformance }) {
           }
         />
       </div>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="일자별 관광객 추이">
           <VisitorTrend data={metrics.dailyTrend} />
         </Panel>
@@ -193,7 +193,7 @@ function PerformanceView({ report }: { report: FestivalReportPerformance }) {
           )}
         </Panel>
       </div>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="구역별 평균 대기시간">
           {metrics.zoneWaitRanking.length ? (
             <ol className="flex flex-col gap-3">
@@ -250,7 +250,7 @@ function EvaluationView({ report }: { report: FestivalReportEvaluation }) {
   return (
     <>
       <h1 className="heading-small text-zinc-950">방문객이 남긴 평가를 확인해 보세요.</h1>
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           label="평균 별점"
           value={
@@ -272,7 +272,7 @@ function EvaluationView({ report }: { report: FestivalReportEvaluation }) {
           }
         />
       </div>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="별점 분포">
           <div className="flex flex-col gap-3">
             {[...report.reviews.ratingDistribution]
@@ -317,7 +317,7 @@ function EvaluationView({ report }: { report: FestivalReportEvaluation }) {
       </div>
       <Panel title="방문객 리뷰">
         {reviews.length ? (
-          <ul className="grid grid-cols-2 gap-4">
+          <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {reviews.map((review, index) => (
               <li
                 key={review.reviewId ?? `${review.displayName}-${index}`}
