@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CustomOverlayMap, Map, useKakaoLoader } from "react-kakao-maps-sdk";
+import { toast } from "sonner";
 import { Bottombar } from "@/components/ui/Bottombar";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -107,15 +108,20 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       setVisitorCountInputMode(null);
       queryClient.invalidateQueries({ queryKey: ["managed-festival", festivalId] });
       queryClient.invalidateQueries({ queryKey: ["managed-festivals"] });
+      toast.success("축제 정보를 수정했습니다.");
     },
+    onError: (error) => toast.error(getApiErrorMessage(error, "축제 수정에 실패했습니다.")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteFestival(festivalId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["managed-festivals"] });
+      // 삭제 후 화면을 떠나므로 이동한 자리에서 결과를 알 수 있게 토스트를 남긴다.
+      toast.success("축제를 삭제했습니다.");
       router.push("/console");
     },
+    onError: (error) => toast.error(getApiErrorMessage(error, "축제 삭제에 실패했습니다.")),
   });
 
   if (festivalQuery.isLoading) return <p className="body-regular text-zinc-500">불러오는 중...</p>;

@@ -56,7 +56,11 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
       setName("");
       setCompanyName("");
       queryClient.invalidateQueries({ queryKey: ["sub-admins", festivalId] });
+      toast.success("운영자를 추가했습니다.", {
+        description: "아래 임시 비밀번호를 전달해 주세요.",
+      });
     },
+    onError: (error) => toast.error(getApiErrorMessage(error, "운영자 추가에 실패했습니다.")),
   });
 
   const deleteMutation = useMutation({
