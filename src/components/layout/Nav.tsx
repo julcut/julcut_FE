@@ -56,10 +56,12 @@ function buildDefaultItems(
 
   if (role === "SUB_ADMIN") {
     return [
-      { label: "대시보드", href: `${festivalBase}/operator-dashboard` },
+      { label: "대시보드", href: `${festivalBase}/dashboard` },
       { label: "스태프관리", href: `${festivalBase}/staffs` },
     ];
   }
+
+  if (role !== "FESTIVAL_OWNER") return [];
 
   return [
     { label: "축제관리", href: festivalBase },
@@ -82,7 +84,7 @@ export function Nav({ items, festivalId, role, accountKind }: NavProps) {
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <nav className="flex items-center gap-1 border-b border-zinc-100 bg-white px-10 py-2">
+    <nav className="flex min-w-0 items-center gap-1 overflow-x-auto border-b border-zinc-100 bg-white px-4 py-2 lg:px-10">
       {navItems.map((item) => {
         const isActive = item.href === activeHref;
 
@@ -91,7 +93,7 @@ export function Nav({ items, festivalId, role, accountKind }: NavProps) {
             key={item.href}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
-            className={`inline-flex items-center justify-center rounded-md px-4 py-1 transition-colors hover:bg-zinc-100 ${
+            className={`inline-flex shrink-0 items-center justify-center rounded-md px-3 py-1 whitespace-nowrap sm:px-4 transition-colors hover:bg-zinc-100 ${
               isActive ? "body-small-bold text-primary" : "body-small text-zinc-950"
             }`}
           >

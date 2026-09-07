@@ -9,9 +9,11 @@ import type { Booth } from "./types";
 function BoothPopup({ booth, onClose }: { booth: Booth; onClose: () => void }) {
   return (
     <div className="mb-2.5 flex flex-col items-center">
-      <div className="w-72 rounded-2xl bg-white p-5">
+      <div className="w-72 max-w-[calc(100vw-32px)] rounded-2xl bg-white p-5">
         <div className="relative flex items-center justify-center border-b border-zinc-200 pb-3">
-          <p className="body-large-bold text-center text-zinc-950">{booth.name}</p>
+          <p className="body-large-bold min-w-0 px-8 text-center wrap-anywhere text-zinc-950">
+            {booth.name}
+          </p>
           <IconButton
             variant="ghost"
             size="sm"
@@ -59,7 +61,7 @@ export function BoothMapView({
 
   if (!process.env.NEXT_PUBLIC_KAKAO_MAP_KEY) {
     return (
-      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50">
+      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50 px-4 text-center">
         <p className="body-small text-zinc-500">NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다.</p>
       </div>
     );
@@ -67,7 +69,7 @@ export function BoothMapView({
 
   if (error) {
     return (
-      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50">
+      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50 px-4 text-center">
         <p className="body-small text-error">카카오맵을 불러오지 못했습니다.</p>
       </div>
     );
@@ -75,7 +77,7 @@ export function BoothMapView({
 
   if (loading) {
     return (
-      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50">
+      <div className="absolute inset-0 isolate flex items-center justify-center border border-zinc-200 bg-zinc-50 px-4 text-center">
         <p className="body-small text-zinc-500">지도를 불러오는 중...</p>
       </div>
     );

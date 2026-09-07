@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FestivalOwnerGuard } from "@/components/auth/FestivalOwnerGuard";
 import { SubAdminDetailPanel } from "@/features/operators/SubAdminDetailPanel";
 
 export default async function SubAdminDetailPage({
@@ -8,14 +9,19 @@ export default async function SubAdminDetailPage({
 }) {
   const { festivalId, adminId } = await params;
   return (
-    <div className="col-span-3 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="heading-small">운영자 상세 조회 (관리자)</h1>
-        <Link href={`/console/festivals/${festivalId}/operators`} className="body-small underline">
-          목록으로
-        </Link>
+    <FestivalOwnerGuard festivalId={festivalId}>
+      <div className="col-span-3 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h1 className="heading-small">운영자 상세 조회 (관리자)</h1>
+          <Link
+            href={`/console/festivals/${festivalId}/operators`}
+            className="body-small underline"
+          >
+            목록으로
+          </Link>
+        </div>
+        <SubAdminDetailPanel festivalId={festivalId} adminId={adminId} />
       </div>
-      <SubAdminDetailPanel festivalId={festivalId} adminId={adminId} />
-    </div>
+    </FestivalOwnerGuard>
   );
 }
