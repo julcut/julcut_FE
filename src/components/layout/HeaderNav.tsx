@@ -29,7 +29,7 @@ export function HeaderNav({
   hideNav = false,
 }: HeaderNavProps) {
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-0 shrink-0 flex-col">
       <Header
         variant="login"
         href="/console"

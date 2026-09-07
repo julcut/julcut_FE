@@ -41,20 +41,22 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
   return (
     <AdminAuthGuard>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-dvh min-w-0 flex-col">
         <HeaderNav
           userName={adminName}
           navItems={navItems}
-          festivalName={festivalName}
+          festivalName={festivalName ?? undefined}
           role={role}
           accountKind={accountKind}
           hideNav={hideNav || hideHomeNav}
         />
-        <div className="relative flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
           <div
             className={cn(
               "absolute inset-0",
-              fullBleed ? "overflow-hidden" : "overflow-y-auto px-10 py-[30px]",
+              fullBleed
+                ? "overflow-hidden"
+                : "overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-[30px]",
             )}
           >
             {/*
@@ -63,7 +65,13 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
               24px(gap-6) 거터만 정의한다. 각 화면 루트는 col-span-1/2/3으로
               몇 컬럼을 쓸지 선언한다 — 폭을 w-2/3 같은 비율로 직접 계산하지 않는다.
             */}
-            {fullBleed ? children : <div className="grid grid-cols-3 gap-6">{children}</div>}
+            {fullBleed ? (
+              children
+            ) : (
+              <div className="grid min-w-0 grid-cols-3 gap-6 [&>*]:min-w-0 max-lg:[&>*]:col-span-3">
+                {children}
+              </div>
+            )}
           </div>
         </div>
       </div>

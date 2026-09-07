@@ -65,8 +65,8 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
 
   return (
     <div className="col-span-3 flex flex-col gap-4">
-      <div className="grid grid-cols-3 items-start gap-6">
-        <div className="col-span-1 flex flex-col gap-4 rounded-lg border border-zinc-300 bg-white p-6">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-3">
+        <div className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white p-6">
           <p className="body-large-bold text-zinc-950">운영자 추가</p>
 
           {created ? (
@@ -142,7 +142,7 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
           </form>
         </div>
 
-        <div className="col-span-2 flex flex-col rounded-lg border border-zinc-300 bg-white">
+        <div className="flex min-w-0 flex-col xl:col-span-2 rounded-lg border border-zinc-300 bg-white">
           <div className="flex items-center gap-3 border-b border-zinc-200 px-6 py-4">
             <Checkbox
               checked={allSelected}
@@ -178,7 +178,7 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
                     onCheckedChange={() => toggleOne(operator.adminId)}
                   />
                   <PersonIcon className="size-4 shrink-0 text-zinc-400" />
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex min-w-0 flex-col gap-0.5 wrap-anywhere">
                     <p className="body-regular-bold text-zinc-950">
                       {operator.name}
                       <span className="body-small font-normal text-zinc-500">

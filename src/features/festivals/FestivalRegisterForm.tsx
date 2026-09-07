@@ -13,10 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
 import { createFestival, searchFestivalSeries } from "@/features/festivals/api";
-import type {
-  FestivalSeriesSearchResult,
-  FestivalVisitorCountInputMode,
-} from "@/features/festivals/types";
+import type { FestivalSeriesSearchResult } from "@/features/festivals/types";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import {
   createInitialLocationDrafts,
@@ -44,8 +41,6 @@ export function FestivalRegisterForm() {
   const [primaryKey, setPrimaryKey] = useState(() => locations[0].key);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [visitorCountInputMode, setVisitorCountInputMode] =
-    useState<FestivalVisitorCountInputMode>("DAILY");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [festivalSearchOpen, setFestivalSearchOpen] = useState(false);
@@ -148,7 +143,6 @@ export function FestivalRegisterForm() {
         // 디자인에 운영시간 입력이 추가되면 이 기본값을 실제 입력값으로 교체해야 한다.
         operationStartTime: "09:00:00",
         operationEndTime: "18:00:00",
-        visitorCountInputMode,
       };
 
       const festival = await createFestival(request);
@@ -212,40 +206,43 @@ export function FestivalRegisterForm() {
         <div className="flex flex-col gap-4">
           {locations.map((location, index) => (
             <div key={location.key} className="flex flex-col gap-3">
-              {index > 0 ? (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="body-small-bold text-zinc-950">장소 {index + 1}</p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={<TrashIcon />}
-                    onClick={() => removeLocation(location.key)}
-                  >
-                    삭제
-                  </Button>
-                </div>
-              ) : null}
+              <div className="flex flex-col gap-1">
+                {index > 0 ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="body-small-bold text-zinc-950">장소 {index + 1}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      icon={<TrashIcon />}
+                      className="py-0"
+                      onClick={() => removeLocation(location.key)}
+                    >
+                      삭제
+                    </Button>
+                  </div>
+                ) : null}
 
-              {location.roadAddress ? (
-                <Input
-                  disabled
-                  value={location.roadAddress}
-                  className="disabled:border-zinc-400!"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddressSearchTargetKey(location.key);
-                    setAddressSearchState("default");
-                  }}
-                  className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 body-regular text-zinc-950 transition-colors hover:bg-zinc-50"
-                >
-                  <MagnifyingGlassIcon className="size-4" />
-                  주소 찾기
-                </button>
-              )}
+                {location.roadAddress ? (
+                  <Input
+                    disabled
+                    value={location.roadAddress}
+                    className="disabled:border-zinc-400!"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddressSearchTargetKey(location.key);
+                      setAddressSearchState("default");
+                    }}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 body-regular text-zinc-950 transition-colors hover:bg-zinc-50"
+                  >
+                    <MagnifyingGlassIcon className="size-4" />
+                    주소 찾기
+                  </button>
+                )}
+              </div>
               <Input
                 placeholder="상세주소"
                 value={location.detailAddress}
@@ -253,62 +250,31 @@ export function FestivalRegisterForm() {
                   updateLocation(location.key, { detailAddress: event.target.value })
                 }
               />
+              {index === 0 ? (
+                <div className="flex gap-3">
+                  <Input
+                    label="시작날짜"
+                    wrapperClassName="flex-1"
+                    placeholder="YYYY.mm.dd"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={startDate}
+                    onChange={(event) => setStartDate(formatDateInput(event.target.value))}
+                  />
+                  <Input
+                    label="종료날짜"
+                    wrapperClassName="flex-1"
+                    placeholder="YYYY.mm.dd"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={endDate}
+                    onChange={(event) => setEndDate(formatDateInput(event.target.value))}
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
-
-        <div className="flex gap-3">
-          <Input
-            label="시작날짜"
-            wrapperClassName="flex-1"
-            placeholder="YYYY.mm.dd"
-            inputMode="numeric"
-            maxLength={10}
-            value={startDate}
-            onChange={(event) => setStartDate(formatDateInput(event.target.value))}
-          />
-          <Input
-            label="종료날짜"
-            wrapperClassName="flex-1"
-            placeholder="YYYY.mm.dd"
-            inputMode="numeric"
-            maxLength={10}
-            value={endDate}
-            onChange={(event) => setEndDate(formatDateInput(event.target.value))}
-          />
-        </div>
-
-        <fieldset className="flex flex-col gap-3">
-          <legend className="body-small-bold text-zinc-950">방문 인원 집계 방식</legend>
-          <div className="grid grid-cols-2 gap-3">
-            {(
-              [
-                ["DAILY", "일자별 입력", "축제 일차마다 방문 인원을 입력합니다."],
-                ["TOTAL", "총 방문객 입력", "축제 전체 방문 인원만 입력합니다."],
-              ] as const
-            ).map(([value, label, description]) => (
-              <label
-                key={value}
-                className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-                  visitorCountInputMode === value
-                    ? "border-primary bg-zinc-50"
-                    : "border-zinc-300 bg-white"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="visitorCountInputMode"
-                  value={value}
-                  checked={visitorCountInputMode === value}
-                  onChange={() => setVisitorCountInputMode(value)}
-                  className="sr-only"
-                />
-                <span className="body-small-bold text-zinc-950">{label}</span>
-                <span className="body-caption mt-1 block text-zinc-500">{description}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
 
         <Button
           type="button"

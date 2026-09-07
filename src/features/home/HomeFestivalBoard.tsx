@@ -68,18 +68,22 @@ function formatDday(startDate: string) {
 function getFestivalHref(festival: FestivalSummary) {
   return festival.role === "FESTIVAL_OWNER"
     ? `/console/festivals/${festival.festivalId}`
-    : `/console/festivals/${festival.festivalId}/operator-dashboard`;
+    : `/console/festivals/${festival.festivalId}/dashboard`;
 }
 
 function FestivalCard({ festival }: { festival: FestivalSummary }) {
   return (
     <Link
       href={getFestivalHref(festival)}
-      className="flex w-full flex-col gap-2 px-5 py-4 transition-colors hover:bg-zinc-50"
+      className="flex w-full min-w-0 flex-col gap-2 px-5 py-4 transition-colors hover:bg-zinc-50"
     >
-      <div className="flex items-start gap-2">
-        <p className="body-regular-bold text-zinc-950">{festival.festivalName}</p>
-        {festival.role === "FESTIVAL_OWNER" ? <FestivalOwnerBadge /> : <OperatorBadge />}
+      <div className="flex min-w-0 items-start gap-2">
+        <p className="body-regular-bold min-w-0 flex-1 wrap-anywhere text-zinc-950">
+          {festival.festivalName}
+        </p>
+        <span className="shrink-0">
+          {festival.role === "FESTIVAL_OWNER" ? <FestivalOwnerBadge /> : <OperatorBadge />}
+        </span>
       </div>
       <div className="flex flex-col items-start gap-1">
         <div className="flex items-center gap-2">
@@ -107,7 +111,7 @@ function StatusColumn({
   festivals: FestivalSummary[];
 }) {
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <div
         className={`heading-small flex gap-2 rounded-lg p-5 text-zinc-950 ${STATUS_HEADER_STYLES[status]}`}
       >
@@ -116,7 +120,7 @@ function StatusColumn({
       </div>
       {festivals.length > 0 && (
         <div
-          className={`flex flex-col divide-y rounded-lg border ${STATUS_BODY_BORDER_STYLES[status]}`}
+          className={`flex flex-col divide-y overflow-hidden rounded-lg border ${STATUS_BODY_BORDER_STYLES[status]}`}
         >
           {festivals.map((festival) => (
             <FestivalCard key={festival.festivalId} festival={festival} />
@@ -174,7 +178,7 @@ export function HomeFestivalBoard() {
   }));
 
   return (
-    <div className="grid items-start gap-6 md:grid-cols-3">
+    <div className="grid min-w-0 items-start gap-6 xl:grid-cols-3">
       {festivalsByStatus.map(({ status, festivals }) => (
         <StatusColumn key={status} status={status} festivals={festivals} />
       ))}

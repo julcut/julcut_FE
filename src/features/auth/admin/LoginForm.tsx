@@ -36,13 +36,17 @@ export function LoginForm() {
           loginMutation.mutate({ email, password });
         }}
       >
-        <div className="rounded-lg bg-zinc-100 p-1">
+        <div className="bg-zinc-100 p-1">
           <div className="grid grid-cols-2 gap-1">
             <Button
               type="button"
               variant="ghost"
-              selected={accountKind === "GOVERNMENT"}
-              className={accountKind === "GOVERNMENT" ? "bg-white" : ""}
+              aria-pressed={accountKind === "GOVERNMENT"}
+              className={
+                accountKind === "GOVERNMENT"
+                  ? "rounded-none bg-white text-zinc-950 hover:bg-white"
+                  : "rounded-none text-zinc-400"
+              }
               onClick={() => setAccountKind("GOVERNMENT")}
             >
               공무원
@@ -50,8 +54,12 @@ export function LoginForm() {
             <Button
               type="button"
               variant="ghost"
-              selected={accountKind === "CONTRACTOR"}
-              className={accountKind === "CONTRACTOR" ? "bg-white" : ""}
+              aria-pressed={accountKind === "CONTRACTOR"}
+              className={
+                accountKind === "CONTRACTOR"
+                  ? "rounded-none bg-white text-zinc-950 hover:bg-white"
+                  : "rounded-none text-zinc-400"
+              }
               onClick={() => setAccountKind("CONTRACTOR")}
             >
               일반
@@ -63,7 +71,7 @@ export function LoginForm() {
           type="email"
           required
           label="이메일"
-          placeholder={accountKind === "GOVERNMENT" ? "공무원 이메일" : "가입한 이메일"}
+          placeholder={accountKind === "GOVERNMENT" ? "공무원 이메일" : "이메일"}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />

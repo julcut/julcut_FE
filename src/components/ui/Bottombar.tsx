@@ -26,7 +26,7 @@ interface BottombarSelectedProps {
 export type BottombarProps = BottombarDefaultProps | BottombarSelectedProps;
 
 const BASE_CLASSES =
-  "fixed inset-x-0 bottom-0 z-20 flex h-[72px] w-full shrink-0 items-center border-t border-zinc-200 bg-white px-10";
+  "fixed inset-x-0 bottom-0 z-20 flex h-[72px] w-full shrink-0 items-center border-t border-zinc-200 bg-white px-4 sm:px-10";
 
 /**
  * 화면 하단 액션 바 — "default"(취소/등록)와 "selected"(N개 선택됨 + 삭제)

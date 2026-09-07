@@ -66,3 +66,12 @@ export function boothMapPinsToNodeChanges(
 
   return changes;
 }
+
+/** 구역에는 현재 존재하는 부스만 포함하며 신규 부스는 clientNodeId로 연결한다. */
+export function boothIdsToNodeIds(boothIds: string[], booths: LocalBoothPin[]): string[] {
+  const nodeIdByBoothId = new Map(booths.map((booth) => [booth.id, booth.nodeId ?? booth.id]));
+  return boothIds.flatMap((id) => {
+    const nodeId = nodeIdByBoothId.get(id);
+    return nodeId === undefined ? [] : [nodeId];
+  });
+}

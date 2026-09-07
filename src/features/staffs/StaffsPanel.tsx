@@ -72,8 +72,8 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
 
   return (
     <div className="col-span-3">
-      <div className="grid min-h-[calc(100vh-250px)] grid-cols-3 items-stretch gap-6">
-        <section className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-8 py-6">
+      <div className="grid min-h-[calc(100vh-250px)] grid-cols-1 xl:grid-cols-3 items-stretch gap-6">
+        <section className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">스태프 추가</p>
 
           <form
@@ -120,7 +120,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
           </form>
         </section>
 
-        <section className="col-span-2 flex min-w-0 flex-col rounded-lg border border-zinc-300 bg-white px-8 py-6">
+        <section className="xl:col-span-2 flex min-w-0 flex-col rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <div className="flex items-center gap-2 pb-4">
             <Checkbox
               className="border-zinc-200 data-[state=checked]:border-point-600 data-[state=checked]:bg-point-600"
@@ -161,11 +161,11 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
                   >
                     <div className="flex items-center gap-1">
                       <PersonIcon className="size-4 shrink-0 text-point-600" />
-                      <p className="body-regular text-zinc-950 hover:underline">
+                      <p className="body-regular wrap-anywhere text-zinc-950 hover:underline">
                         {staff.name}({formatPhoneNumber(staff.phoneNumber)})
                       </p>
                     </div>
-                    <p className="body-small pl-4 text-zinc-500">{staff.loginId}</p>
+                    <p className="body-small wrap-anywhere pl-4 text-zinc-500">{staff.loginId}</p>
                   </Link>
                 </div>
               ))}

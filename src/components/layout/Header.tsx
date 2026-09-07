@@ -42,14 +42,14 @@ export interface HeaderProps {
  * 직접 적용한다.
  */
 const USER_MENU_LINK_CLASSES =
-  "inline-flex h-10 items-center justify-center gap-2.5 rounded-md px-4 py-2 body-regular text-zinc-950 transition-colors hover:bg-zinc-100";
+  "inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-md px-2 py-2 sm:px-4 body-regular text-zinc-950 transition-colors hover:bg-zinc-100";
 const CTA_LINK_CLASSES =
   "inline-flex items-center justify-center gap-2.5 rounded-md border border-zinc-300 bg-white px-4 py-2 body-regular text-zinc-950 transition-colors hover:bg-zinc-100";
 
 /** 로고 박스(87x48) + 현재 축제명. Figma 스펙: 로고-축제명 간격 16px(gap-4). */
 function HeaderBrand({ href, festivalName }: { href: string; festivalName?: string }) {
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
       <Link
         href={href}
         className="flex h-12 w-[87px] shrink-0 items-center justify-center bg-zinc-200"
@@ -57,7 +57,9 @@ function HeaderBrand({ href, festivalName }: { href: string; festivalName?: stri
         <span className="heading-small text-zinc-900">축지법</span>
       </Link>
       {festivalName ? (
-        <span className="body-regular-bold text-zinc-950">{festivalName}</span>
+        <span title={festivalName} className="body-regular-bold min-w-0 truncate text-zinc-950">
+          {festivalName}
+        </span>
       ) : null}
     </div>
   );
@@ -74,14 +76,14 @@ function HeaderRoleUser({
   userMenuHref: string;
 }) {
   return (
-    <div className="flex h-10 items-center gap-1">
+    <div className="flex h-10 max-w-[55%] shrink-0 items-center gap-1">
       {role === "FESTIVAL_OWNER" ? <FestivalOwnerBadge /> : null}
       {role === "SUB_ADMIN" ? <OperatorBadge /> : null}
       <Link href={userMenuHref} className={USER_MENU_LINK_CLASSES}>
         <span className="size-4 shrink-0">
           <PersonIcon />
         </span>
-        {userName} 님
+        <span className="max-w-24 truncate sm:max-w-48">{userName} 님</span>
       </Link>
     </div>
   );
@@ -107,7 +109,7 @@ export function Header({
     );
 
   return (
-    <header className="flex items-center justify-between bg-white px-10 py-3">
+    <header className="flex min-w-0 items-center justify-between gap-2 bg-white px-4 py-3 sm:gap-4 lg:px-10">
       <HeaderBrand href={href} festivalName={festivalName} />
       {action ?? defaultAction}
     </header>

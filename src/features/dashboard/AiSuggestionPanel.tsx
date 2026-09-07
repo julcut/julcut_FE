@@ -22,6 +22,7 @@ export function AiSuggestionPanel({
       {suggestions.map((suggestion) => (
         <MapNoticeCard
           key={suggestion.id}
+          className="w-full"
           title={suggestion.title}
           description={suggestion.description}
           descriptionIcon={<ExclamationTriangleIcon className="size-4 text-zinc-950" />}

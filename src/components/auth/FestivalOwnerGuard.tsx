@@ -26,7 +26,7 @@ export function FestivalOwnerGuard({
 
   useEffect(() => {
     if (role === "SUB_ADMIN") {
-      router.replace(`/console/festivals/${festivalId}/operator-dashboard`);
+      router.replace(`/console/festivals/${festivalId}/dashboard`);
     }
   }, [festivalId, role, router]);
 
@@ -38,7 +38,7 @@ export function FestivalOwnerGuard({
     return <p className="body-small text-error">{getApiErrorMessage(festivalQuery.error)}</p>;
   }
 
-  if (role === "SUB_ADMIN") {
+  if (role !== "FESTIVAL_OWNER") {
     return null;
   }
 

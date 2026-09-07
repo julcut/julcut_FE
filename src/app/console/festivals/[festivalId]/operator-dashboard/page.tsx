@@ -1,4 +1,4 @@
-import { DashboardPanel } from "@/features/dashboard/DashboardPanel";
+import { redirect } from "next/navigation";
 
 export default async function OperatorDashboardPage({
   params,
@@ -6,5 +6,5 @@ export default async function OperatorDashboardPage({
   params: Promise<{ festivalId: string }>;
 }) {
   const { festivalId } = await params;
-  return <DashboardPanel festivalId={festivalId} />;
+  redirect(`/console/festivals/${festivalId}/dashboard`);
 }

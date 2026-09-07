@@ -19,7 +19,6 @@ import type {
   FestivalLocationRequest,
   FestivalLocationResponse,
   FestivalSeriesSearchResult,
-  FestivalVisitorCountInputMode,
 } from "./types";
 
 export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
@@ -32,8 +31,6 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const [detailAddress, setDetailAddress] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
-  const [visitorCountInputMode, setVisitorCountInputMode] =
-    useState<FestivalVisitorCountInputMode | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
 
   const [festivalSearchOpen, setFestivalSearchOpen] = useState(false);
@@ -74,7 +71,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       const locations: FestivalLocationRequest[] = festival.locations.map((location) => ({
         ...location,
         detailAddress: location.primary
-          ? (detailAddress ?? festival.detailAddress)
+          ? (detailAddress ?? festival.detailAddress ?? undefined)
           : (location.detailAddress ?? undefined),
         roadAddress: location.roadAddress ?? undefined,
         jibunAddress: location.jibunAddress ?? undefined,
@@ -85,14 +82,11 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         boundaryGeometry: location.boundaryGeometry ?? undefined,
       }));
       return updateFestival(festivalId, {
-        name: name ?? festival.festivalName,
-        description: description ?? festival.description,
+        name: name ?? festival.festivalName ?? "",
+        description: description ?? festival.description ?? "",
         locations,
-        startDate: startDate ? toIsoDate(startDate) : festival.startDate,
-        endDate: endDate ? toIsoDate(endDate) : festival.endDate,
-        operationStartTime: festival.operationStartTime,
-        operationEndTime: festival.operationEndTime,
-        visitorCountInputMode: visitorCountInputMode ?? undefined,
+        startDate: toIsoDate(startDate ?? toDisplayDate(festival.startDate ?? "")),
+        endDate: toIsoDate(endDate ?? toDisplayDate(festival.endDate ?? "")),
       });
     },
     onSuccess: () => {
@@ -102,7 +96,6 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       setDetailAddress(null);
       setStartDate(null);
       setEndDate(null);
-      setVisitorCountInputMode(null);
       queryClient.invalidateQueries({ queryKey: ["managed-festival", festivalId] });
       queryClient.invalidateQueries({ queryKey: ["managed-festivals"] });
     },
@@ -122,13 +115,18 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   }
   if (!festival) return null;
 
-  const displayStartDate = startDate ?? toDisplayDate(festival.startDate);
-  const displayEndDate = endDate ?? toDisplayDate(festival.endDate);
-  const savedVisitorCountInputMode = festival.visitorCountInputMode;
+  const displayStartDate = startDate ?? toDisplayDate(festival.startDate ?? "");
+  const displayEndDate = endDate ?? toDisplayDate(festival.endDate ?? "");
 
   function handleEditClick() {
-    if (savedVisitorCountInputMode === "UNSET" && visitorCountInputMode === null) {
-      setDateError("방문 인원 집계 방식을 선택해 주세요.");
+    const updatedName = (name ?? festival?.festivalName ?? "").trim();
+    const updatedDescription = (description ?? festival?.description ?? "").trim();
+    if (updatedName.length < 2 || updatedName.length > 100) {
+      setDateError("축제명은 2~100자로 입력해 주세요.");
+      return;
+    }
+    if (!updatedDescription || updatedDescription.length > 1000) {
+      setDateError("축제 내용은 1~1000자로 입력해 주세요.");
       return;
     }
     if (
@@ -147,15 +145,15 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   }
 
   return (
-    <div className="col-span-3 flex flex-col gap-6">
-      <div className="grid grid-cols-3 items-start gap-6">
-        <div className="col-span-1 flex flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-8 py-6">
+    <div className="col-span-3 flex min-w-0 flex-col gap-6 pb-24">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-3">
+        <div className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">축제 정보</p>
 
           <Input
             label="축제명"
             layout="with-button"
-            value={name ?? festival.festivalName}
+            value={name ?? festival.festivalName ?? ""}
             onChange={(event) => setName(event.target.value)}
             button={
               <Button type="button" onClick={() => setFestivalSearchOpen(true)}>
@@ -168,7 +166,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             <label className="body-small-bold text-zinc-950">내용</label>
             <Textarea
               rows={3}
-              value={description ?? festival.description}
+              value={description ?? festival.description ?? ""}
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
@@ -176,9 +174,9 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
           <div className="flex w-full flex-col gap-1">
             <label className="body-small-bold text-zinc-950">장소</label>
             <div className="flex flex-col gap-2">
-              <Input disabled value={festival.address} />
+              <Input disabled value={festival.address ?? ""} />
               <Input
-                value={detailAddress ?? festival.detailAddress}
+                value={detailAddress ?? festival.detailAddress ?? ""}
                 onChange={(event) => setDetailAddress(event.target.value)}
               />
             </div>
@@ -205,46 +203,10 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             />
           </div>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="body-small-bold text-zinc-950">방문 인원 집계 방식</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  ["DAILY", "일자별"],
-                  ["TOTAL", "총 방문객"],
-                ] as const
-              ).map(([value, label]) => {
-                const selected = (visitorCountInputMode ?? savedVisitorCountInputMode) === value;
-                return (
-                  <label
-                    key={value}
-                    className={`cursor-pointer rounded-lg border px-3 py-2 text-center transition-colors ${
-                      selected ? "border-primary bg-zinc-50" : "border-zinc-300 bg-white"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="visitorCountInputMode"
-                      value={value}
-                      checked={selected}
-                      onChange={() => setVisitorCountInputMode(value)}
-                      className="sr-only"
-                    />
-                    <span className="body-small-bold text-zinc-950">{label}</span>
-                  </label>
-                );
-              })}
-            </div>
-            {savedVisitorCountInputMode === "UNSET" ? (
-              <p className="body-caption text-zinc-500">
-                기존 축제의 결과보고서를 만들려면 집계 방식을 선택해야 합니다.
-              </p>
-            ) : null}
-          </fieldset>
           {dateError ? <p className="body-caption text-error">{dateError}</p> : null}
         </div>
 
-        <div className="relative col-span-2 min-h-[calc(100vh-252px)] overflow-hidden rounded-lg bg-zinc-100">
+        <div className="relative min-h-[360px] xl:col-span-2 xl:min-h-[calc(100vh-252px)] overflow-hidden rounded-lg bg-zinc-100">
           <FestivalLocationMap locations={festival?.locations} />
           <Button
             type="button"
@@ -298,6 +260,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         title="축제를 수정하시겠습니까?"
+        description={updateMutation.isError ? getApiErrorMessage(updateMutation.error) : undefined}
         confirmLabel="수정"
         confirmVariant="primary"
         confirmPending={updateMutation.isPending}
@@ -331,7 +294,7 @@ function FestivalLocationMap({ locations }: { locations: FestivalLocationRespons
 
   if (!center) {
     return (
-      <div className="flex h-full min-h-[calc(100vh-252px)] items-center justify-center px-6">
+      <div className="flex h-full min-h-[360px] xl:min-h-[calc(100vh-252px)] items-center justify-center px-6">
         <p className="body-small text-zinc-500">등록된 축제 위치 좌표가 없습니다.</p>
       </div>
     );
@@ -339,7 +302,7 @@ function FestivalLocationMap({ locations }: { locations: FestivalLocationRespons
 
   if (!process.env.NEXT_PUBLIC_KAKAO_MAP_KEY || error || loading) {
     return (
-      <div className="flex h-full min-h-[calc(100vh-252px)] items-center justify-center">
+      <div className="flex h-full min-h-[360px] xl:min-h-[calc(100vh-252px)] items-center justify-center">
         <p className="body-small text-zinc-500">
           {!process.env.NEXT_PUBLIC_KAKAO_MAP_KEY
             ? "NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다."
@@ -352,7 +315,7 @@ function FestivalLocationMap({ locations }: { locations: FestivalLocationRespons
   }
 
   return (
-    <Map center={center} isPanto={false} level={4} className="absolute inset-0">
+    <Map center={center} isPanto={false} level={2} className="absolute inset-0">
       <CustomOverlayMap position={center}>
         <span aria-label="축제 위치" className="block size-3 rounded-full bg-point-600 shadow-sm" />
       </CustomOverlayMap>
