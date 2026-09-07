@@ -106,9 +106,15 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
           {loginMutation.isPending ? "로그인 중..." : "로그인"}
         </Button>
 
-        <Link href="/forgot-password" className="body-small mx-auto text-zinc-950">
-          비밀번호 찾기
-        </Link>
+        <div className="mx-auto flex items-center gap-3">
+          <Link href="/forgot-password" className="body-small text-zinc-950">
+            비밀번호 찾기
+          </Link>
+          <span aria-hidden className="h-3 w-px bg-zinc-200" />
+          <Link href="/staff/login" className="body-small text-zinc-950">
+            현장 스태프 로그인
+          </Link>
+        </div>
       </form>
     </AuthCard>
   );
