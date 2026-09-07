@@ -23,6 +23,8 @@ export interface ConfirmDialogProps {
   className?: string;
   /** 딤 오버레이에 덧붙일 클래스. 기본값은 콘솔 상단바 아래만 덮는 위치다. */
   overlayClassName?: string;
+  /** 제목 아래, 버튼 위에 넣을 내용. 확인만 받는 게 아니라 값을 고쳐 받을 때 쓴다. */
+  children?: React.ReactNode;
 }
 
 export function ConfirmDialog({
@@ -37,6 +39,7 @@ export function ConfirmDialog({
   confirmPending = false,
   className,
   overlayClassName,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -68,6 +71,8 @@ export function ConfirmDialog({
                 {description}
               </Dialog.Description>
             ) : null}
+
+            {children ? <div className="mt-6">{children}</div> : null}
 
             <div className="mt-8 flex gap-3">
               <Dialog.Close asChild>

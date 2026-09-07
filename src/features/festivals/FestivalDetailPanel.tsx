@@ -133,7 +133,8 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const displayStartDate = startDate ?? toDisplayDate(festival.startDate ?? "");
   const displayEndDate = endDate ?? toDisplayDate(festival.endDate ?? "");
 
-  function handleEditClick() {
+  /** 모달 안에서 고친 값을 검증하고 저장한다. */
+  function handleEditSubmit() {
     const updatedName = (name ?? festival?.festivalName ?? "").trim();
     const updatedDescription = (description ?? festival?.description ?? "").trim();
     if (updatedName.length < 2 || updatedName.length > 100) {
@@ -156,7 +157,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       return;
     }
     setFormError(null);
-    setEditDialogOpen(true);
+    updateMutation.mutate();
   }
 
   return (
@@ -165,35 +166,19 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         <div className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">축제 정보</p>
 
-          <Input
-            label="축제명"
-            layout="with-button"
-            value={name ?? festival.festivalName ?? ""}
-            onChange={(event) => setName(event.target.value)}
-            button={
-              <Button type="button" onClick={() => setFestivalSearchOpen(true)}>
-                축제 검색
-              </Button>
-            }
-          />
+          {/* 축제 정보는 읽기 전용으로 보여주고, 고치는 일은 하단바 「수정하기」가 여는 모달에서 한다. */}
+          <Input label="축제명" disabled value={festival.festivalName ?? ""} />
 
           <div className="flex w-full flex-col gap-1">
             <label className="body-small-bold text-zinc-950">내용</label>
-            <Textarea
-              rows={3}
-              value={description ?? festival.description ?? ""}
-              onChange={(event) => setDescription(event.target.value)}
-            />
+            <Textarea rows={3} disabled value={festival.description ?? ""} />
           </div>
 
           <div className="flex w-full flex-col gap-1">
             <label className="body-small-bold text-zinc-950">장소</label>
             <div className="flex flex-col gap-2">
               <Input disabled value={festival.address ?? ""} />
-              <Input
-                value={detailAddress ?? festival.detailAddress ?? ""}
-                onChange={(event) => setDetailAddress(event.target.value)}
-              />
+              <Input disabled value={festival.detailAddress ?? ""} />
             </div>
           </div>
 
@@ -201,24 +186,16 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             <Input
               label="시작날짜"
               wrapperClassName="flex-1"
-              placeholder="YYYY.mm.dd"
-              inputMode="numeric"
-              maxLength={10}
-              value={displayStartDate}
-              onChange={(event) => setStartDate(formatDateInput(event.target.value))}
+              disabled
+              value={toDisplayDate(festival.startDate ?? "")}
             />
             <Input
               label="종료날짜"
               wrapperClassName="flex-1"
-              placeholder="YYYY.mm.dd"
-              inputMode="numeric"
-              maxLength={10}
-              value={displayEndDate}
-              onChange={(event) => setEndDate(formatDateInput(event.target.value))}
+              disabled
+              value={toDisplayDate(festival.endDate ?? "")}
             />
           </div>
-
-          {formError ? <p className="body-caption text-error">{formError}</p> : null}
         </div>
 
         <div className="relative min-h-[360px] xl:col-span-2 xl:min-h-[calc(100vh-252px)] overflow-hidden rounded-lg bg-zinc-100">
@@ -239,7 +216,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         cancelLabel="삭제하기"
         onCancel={() => setDeleteDialogOpen(true)}
         submitLabel="수정하기"
-        onSubmit={handleEditClick}
+        onSubmit={() => setEditDialogOpen(true)}
       />
 
       <SearchDialog
@@ -273,17 +250,77 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
       <ConfirmDialog
         open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        title="축제를 수정하시겠습니까?"
-        description={updateMutation.isError ? getApiErrorMessage(updateMutation.error) : undefined}
+        onOpenChange={(next) => {
+          setEditDialogOpen(next);
+          if (!next) setFormError(null);
+        }}
+        title="축제 정보 수정"
         confirmLabel="수정"
         confirmVariant="primary"
         confirmPending={updateMutation.isPending}
-        onConfirm={() => updateMutation.mutate()}
-      />
-      {updateMutation.isError ? (
-        <p className="body-small text-error">{getApiErrorMessage(updateMutation.error)}</p>
-      ) : null}
+        onConfirm={handleEditSubmit}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <Input
+            label="축제명"
+            layout="with-button"
+            value={name ?? festival.festivalName ?? ""}
+            onChange={(event) => setName(event.target.value)}
+            button={
+              <Button type="button" onClick={() => setFestivalSearchOpen(true)}>
+                축제 검색
+              </Button>
+            }
+          />
+
+          <div className="flex w-full flex-col gap-1">
+            <label className="body-small-bold text-zinc-950">내용</label>
+            <Textarea
+              rows={3}
+              value={description ?? festival.description ?? ""}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+
+          <div className="flex w-full flex-col gap-1">
+            <label className="body-small-bold text-zinc-950">장소</label>
+            <div className="flex flex-col gap-2">
+              <Input disabled value={festival.address ?? ""} />
+              <Input
+                placeholder="상세주소"
+                value={detailAddress ?? festival.detailAddress ?? ""}
+                onChange={(event) => setDetailAddress(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Input
+              label="시작날짜"
+              wrapperClassName="flex-1"
+              placeholder="YYYY.mm.dd"
+              inputMode="numeric"
+              maxLength={10}
+              value={displayStartDate}
+              onChange={(event) => setStartDate(formatDateInput(event.target.value))}
+            />
+            <Input
+              label="종료날짜"
+              wrapperClassName="flex-1"
+              placeholder="YYYY.mm.dd"
+              inputMode="numeric"
+              maxLength={10}
+              value={displayEndDate}
+              onChange={(event) => setEndDate(formatDateInput(event.target.value))}
+            />
+          </div>
+
+          {formError ? <p className="body-caption text-error">{formError}</p> : null}
+          {updateMutation.isError ? (
+            <p className="body-small text-error">{getApiErrorMessage(updateMutation.error)}</p>
+          ) : null}
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={deleteDialogOpen}
