@@ -33,7 +33,6 @@ import {
   type LocationDraft,
 } from "./locationDraft";
 import { SearchDialog, type SearchDialogResult, type SearchDialogState } from "./SearchDialog";
-import { VisitorCountModeField } from "./VisitorCountModeField";
 import { canCreateFestival } from "@/features/auth/admin/types";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -58,9 +57,6 @@ export function FestivalRegisterForm() {
   const [primaryKey, setPrimaryKey] = useState(() => locations[0].key);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  // 미설정(UNSET)으로 등록되면 결과 리포트를 만들 수 없어 기본값을 일자별로 둔다.
-  const [visitorCountInputMode, setVisitorCountInputMode] =
-    useState<FestivalVisitorCountInputMode>("DAILY");
   const [formError, setFormError] = useState<string | null>(null);
   const [mapImage, setMapImage] = useState<File | null>(null);
   const [mapImageError, setMapImageError] = useState<string | null>(null);
@@ -162,7 +158,9 @@ export function FestivalRegisterForm() {
         // 디자인에 운영시간 입력이 추가되면 이 기본값을 실제 입력값으로 교체해야 한다.
         operationStartTime: "09:00:00",
         operationEndTime: "18:00:00",
-        visitorCountInputMode,
+        // 화면설계서에 집계 방식 입력이 없어 화면에는 노출하지 않는다. 다만 보내지 않으면
+        // 축제가 UNSET으로 만들어져 결과 리포트를 영영 만들 수 없으므로 기본값을 싣는다.
+        visitorCountInputMode: "DAILY" as FestivalVisitorCountInputMode,
       };
 
       // 배치도를 첨부했으면 multipart로 함께 올린다. 서버는 이 경로에서만 AI 분석을
@@ -333,10 +331,6 @@ export function FestivalRegisterForm() {
           장소 추가
         </Button>
         {formError ? <p className="body-caption text-error">{formError}</p> : null}
-      </FormSection>
-
-      <FormSection label="방문 인원 집계 방식">
-        <VisitorCountModeField value={visitorCountInputMode} onChange={setVisitorCountInputMode} />
       </FormSection>
 
       <FormSection label="축제부스지도 첨부">

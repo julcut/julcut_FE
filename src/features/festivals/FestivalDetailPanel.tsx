@@ -23,7 +23,6 @@ import type {
   FestivalSeriesSearchResult,
   FestivalVisitorCountInputMode,
 } from "./types";
-import { VisitorCountModeField } from "./VisitorCountModeField";
 
 export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const router = useRouter();
@@ -133,9 +132,6 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
   const displayStartDate = startDate ?? toDisplayDate(festival.startDate ?? "");
   const displayEndDate = endDate ?? toDisplayDate(festival.endDate ?? "");
-  const displayVisitorCountInputMode =
-    visitorCountInputMode ??
-    (festival.visitorCountInputMode === "UNSET" ? null : festival.visitorCountInputMode);
 
   function handleEditClick() {
     const updatedName = (name ?? festival?.festivalName ?? "").trim();
@@ -157,10 +153,6 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
     }
     if (toIsoDate(displayStartDate) > toIsoDate(displayEndDate)) {
       setFormError("종료날짜는 시작날짜보다 빠를 수 없습니다.");
-      return;
-    }
-    if (!displayVisitorCountInputMode) {
-      setFormError("방문 인원 집계 방식을 선택해 주세요.");
       return;
     }
     setFormError(null);
@@ -225,12 +217,6 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
               onChange={(event) => setEndDate(formatDateInput(event.target.value))}
             />
           </div>
-
-          <VisitorCountModeField
-            label="방문 인원 집계 방식"
-            value={displayVisitorCountInputMode}
-            onChange={setVisitorCountInputMode}
-          />
 
           {formError ? <p className="body-caption text-error">{formError}</p> : null}
         </div>
