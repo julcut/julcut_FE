@@ -4,8 +4,9 @@ import { Pencil1Icon } from "@radix-ui/react-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { CustomOverlayMap, Map, useKakaoLoader } from "react-kakao-maps-sdk";
+import { CustomOverlayMap, Map } from "react-kakao-maps-sdk";
 import { toast } from "sonner";
+import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
 import { Bottombar } from "@/components/ui/Bottombar";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -315,9 +316,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 }
 
 function FestivalLocationMap({ locations }: { locations: FestivalLocationResponse[] | undefined }) {
-  const [loading, error] = useKakaoLoader({
-    appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "",
-  });
+  const [loading, error] = useKakaoMapLoader();
   const center = useMemo(() => primaryFestivalCenter(locations), [locations]);
 
   if (!center) {

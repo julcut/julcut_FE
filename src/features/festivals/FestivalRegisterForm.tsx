@@ -4,10 +4,11 @@ import { MagnifyingGlassIcon, PlusIcon, TrashIcon } from "@radix-ui/react-icons"
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useKakaoLoader } from "react-kakao-maps-sdk";
+
 import { AttachmentField } from "@/components/ui/AttachmentField";
 import { Bottombar } from "@/components/ui/Bottombar";
 import { toast } from "sonner";
+import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormSection } from "@/components/ui/FormSection";
@@ -76,10 +77,7 @@ export function FestivalRegisterForm() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
 
-  useKakaoLoader({
-    appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "",
-    libraries: ["services"],
-  });
+  useKakaoMapLoader();
 
   async function searchFestivals(keyword: string) {
     setFestivalSearchPending(true);

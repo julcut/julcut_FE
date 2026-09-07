@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from "react-kakao-maps-sdk";
+import { CustomOverlayMap, Map as KakaoMap, Polygon } from "react-kakao-maps-sdk";
 import {
   Cross2Icon,
   Crosshair2Icon,
@@ -17,6 +17,7 @@ import {
   RulerHorizontalIcon,
 } from "@radix-ui/react-icons";
 import { toast } from "sonner";
+import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -137,9 +138,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [drawTool, setDrawTool] = useState<"select" | "pin">("select");
   const [pendingPinType, setPendingPinType] = useState<NodeType>("BOOTH");
   const [pinTypeMenuOpen, setPinTypeMenuOpen] = useState(false);
-  const [mapLoading, mapError] = useKakaoLoader({
-    appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "",
-  });
+  const [mapLoading, mapError] = useKakaoMapLoader();
   const mapWrapperRef = useRef<HTMLDivElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const kakaoMapRef = useRef<kakao.maps.Map | null>(null);
