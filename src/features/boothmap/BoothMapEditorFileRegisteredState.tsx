@@ -123,6 +123,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const setHideNav = useConsoleUiStore((state) => state.setHideNav);
   const setFullBleed = useConsoleUiStore((state) => state.setFullBleed);
   const [zoomStep, setZoomStep] = useState(0);
+  const [boothListOpen, setBoothListOpen] = useState(false);
   const [drawTool, setDrawTool] = useState<"select" | "pin">("select");
   const [pendingPinType, setPendingPinType] = useState<NodeType>("BOOTH");
   const [pinTypeMenuOpen, setPinTypeMenuOpen] = useState(false);
@@ -734,8 +735,21 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       )}
 
-      <div className="absolute top-10 bottom-10 left-8 w-72">
-        <MapSidePanel className="h-full">
+      <Button
+        variant="outline"
+        className="absolute top-28 left-4 lg:hidden"
+        aria-expanded={boothListOpen}
+        onClick={() => setBoothListOpen((open) => !open)}
+      >
+        {boothListOpen ? "부스 목록 닫기" : "부스 목록"}
+      </Button>
+      <div
+        className={cn(
+          "absolute top-44 bottom-4 left-4 w-[calc(100%-80px)] lg:top-10 lg:bottom-10 lg:left-8 lg:block lg:w-72",
+          !boothListOpen && "hidden",
+        )}
+      >
+        <MapSidePanel className="h-full w-full">
           <p className="body-large-bold text-zinc-950">
             축제부스 <span className="text-primary">{booths.length}</span>
           </p>
@@ -788,7 +802,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </MapSidePanel>
       </div>
 
-      <div className="absolute top-10 right-8 flex items-center gap-4">
+      <div className="absolute top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 lg:top-10 lg:right-8 lg:left-auto lg:gap-4">
         <div className="flex items-center gap-2">
           <span title="편집 내용이 없어 실행취소할 수 없습니다.">
             <IconButton
@@ -840,7 +854,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         />
       </div>
 
-      <div className="absolute right-8 bottom-10 flex flex-col items-center gap-5">
+      <div className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10">
         <div className="flex flex-col gap-1">
           <IconButton
             icon={<RadiobuttonIcon className="size-5" />}
