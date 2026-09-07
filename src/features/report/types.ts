@@ -1,3 +1,5 @@
+import type { CongestionLevel } from "@/features/dashboard/types";
+
 export interface FestivalReportSummary {
   festivalId: string;
   dataAvailable: boolean;
@@ -132,4 +134,20 @@ export interface FestivalReportEvaluation {
     hasMore: boolean;
   };
   ai: FestivalReportEvaluationAi;
+}
+
+/**
+ * 아래 두 타입은 화면설계서 3-4(일차/시간대별 방문 패턴 히트맵)와
+ * 3-6(부스 혼잡도 단계별 지속시간 비율)이 요구하는 데이터 모양이다.
+ * 백엔드 응답에는 아직 대응 필드가 없어 `mockData.ts`의 목업으로 채운다.
+ */
+export interface VisitPatternRow {
+  dayIndex: number;
+  hours: Array<{ hour: number; visitorCount: number }>;
+}
+
+export interface BoothCongestionDurationRow {
+  boothName: string;
+  /** 혼잡도 단계별 지속시간 비율(%). 부스마다 합이 100이 되도록 한다. */
+  shares: Record<CongestionLevel, number>;
 }
