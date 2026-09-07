@@ -1,7 +1,8 @@
 "use client";
 
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { ChevronRightIcon, QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -196,7 +197,42 @@ function ReportHeadline({
   );
 }
 
-function PerformanceView({ report }: { report: FestivalReportPerformance }) {
+/**
+ * 지난 리포트 보기 — 같은 시리즈의 직전 회차 결과리포트로 이동한다.
+ * 이전 축제의 이름은 응답에 없어서, 같은 시리즈라는 전제로 올해 축제명 + 직전 연도로 표기한다.
+ */
+function PreviousReportLink({
+  previousFestivalId,
+  festivalName,
+  festivalYear,
+}: {
+  previousFestivalId: string;
+  festivalName: string;
+  festivalYear: number;
+}) {
+  return (
+    <Link
+      href={`/console/festivals/${previousFestivalId}/report`}
+      className="flex items-center justify-between gap-4 rounded-lg border border-zinc-300 bg-white p-5 transition-colors hover:bg-zinc-50"
+    >
+      <span className="flex flex-col gap-1">
+        <span className="body-regular-bold text-zinc-950">지난 리포트 보기</span>
+        <span className="body-small text-zinc-500">
+          {festivalYear - 1} {festivalName}
+        </span>
+      </span>
+      <ChevronRightIcon className="size-5 shrink-0 text-zinc-500" />
+    </Link>
+  );
+}
+
+function PerformanceView({
+  report,
+  previousFestivalId,
+}: {
+  report: FestivalReportPerformance;
+  previousFestivalId: string | null;
+}) {
   if (!report.performanceAvailable)
     return <EmptyState message="아직 제공할 수 있는 축제 성과 데이터가 없습니다." />;
   const { metrics } = report;
@@ -301,6 +337,14 @@ function PerformanceView({ report }: { report: FestivalReportPerformance }) {
       </div>
 
       <TextSummary summary={report.ai.performanceSummary} />
+
+      {previousFestivalId ? (
+        <PreviousReportLink
+          previousFestivalId={previousFestivalId}
+          festivalName={metrics.festivalName}
+          festivalYear={metrics.festivalYear}
+        />
+      ) : null}
     </>
   );
 }
@@ -548,7 +592,14 @@ function KeywordGroup({
   );
 }
 
-export function ReportPanel({ festivalId }: { festivalId: string }) {
+export function ReportPanel({
+  festivalId,
+  previousFestivalId = null,
+}: {
+  festivalId: string;
+  /** 같은 시리즈의 직전 회차 축제 id. 있으면 "지난 리포트 보기" 링크를 노출한다. */
+  previousFestivalId?: string | null;
+}) {
   const [activeSection, setActiveSection] = useState<ReportSection>("축제성과");
   const performanceQuery = useQuery({
     queryKey: ["festival-report-performance", festivalId],
@@ -572,7 +623,7 @@ export function ReportPanel({ festivalId }: { festivalId: string }) {
         <p className="body-small text-error">{getApiErrorMessage(activeQuery.error)}</p>
       ) : null}
       {activeSection === "축제성과" && performanceQuery.data ? (
-        <PerformanceView report={performanceQuery.data} />
+        <PerformanceView report={performanceQuery.data} previousFestivalId={previousFestivalId} />
       ) : null}
       {activeSection === "방문객평가" && evaluationQuery.data ? (
         <EvaluationView key={festivalId} report={evaluationQuery.data} />

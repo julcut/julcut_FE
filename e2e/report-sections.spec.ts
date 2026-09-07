@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const festivalId = "00000000-0000-0000-0000-000000000010";
+const previousFestivalId = "00000000-0000-0000-0000-000000000009";
 const reportPath = `/console/festivals/${festivalId}/report`;
 
 function ok(data: unknown) {
@@ -137,7 +138,7 @@ async function mockReport(page: Page) {
         progressMessage: null,
         performanceAvailable: true,
         evaluationAvailable: true,
-        previousFestivalId: null,
+        previousFestivalId,
         generatedAt: "2026-05-04T00:00:00Z",
         jobId: "job-1",
       };
@@ -190,6 +191,11 @@ test("결과리포트는 브레드크럼으로 축제성과·방문객평가를 
   await expect(page.getByText("혼잡도 단계별 지속시간 비율")).toBeVisible();
   // 상위 5개만 노출되는지 (주차 구역은 6위라 빠져야 함)
   await expect(page.getByText("주차 구역")).toHaveCount(0);
+  // 지난 리포트 보기 링크가 직전 회차 리포트로 연결된다.
+  await expect(page.getByRole("link", { name: /지난 리포트 보기/ })).toHaveAttribute(
+    "href",
+    `/console/festivals/${previousFestivalId}/report`,
+  );
 
   // 브레드크럼 드롭다운으로 방문객평가 전환
   await page.getByRole("button", { name: "축제성과" }).click();
@@ -207,4 +213,112 @@ test("결과리포트는 브레드크럼으로 축제성과·방문객평가를 
   // 좁은 화면에서도 주요 영역이 그대로 보인다.
   await page.setViewportSize({ width: 420, height: 900 });
   await expect(page.getByText("종합 만족도 점수")).toBeVisible();
+});
+
+test("집계 방식이 없으면 방문 인원 입력 폼 안에서 총합/일자별을 먼저 고른다", async ({ page }) => {
+  const saved: string[] = [];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    let data: unknown;
+    if (path === "/api/admin/me") {
+      data = {
+        adminId: "00000000-0000-0000-0000-000000000001",
+        email: "owner@example.com",
+        name: "테스트 관리자",
+        organization: "축제 운영팀",
+        rank: null,
+        accountKind: "GOVERNMENT",
+        status: "ACTIVE",
+      };
+    } else if (path === `/api/admin/me/managed-festivals/${festivalId}`) {
+      data = {
+        festivalId,
+        festivalName: "테스트 축제",
+        role: "FESTIVAL_OWNER",
+        festivalStatus: "DRAFT",
+        progressStatus: "COMPLETED",
+        visitorCountInputMode: "UNSET",
+        locations: [],
+      };
+    } else if (path.endsWith("/reports/status")) {
+      data = {
+        festivalId,
+        progressStatus: "DONE",
+        visitorInput: "MISSING",
+        generationStatus: "NONE",
+        progressDayIndex: null,
+        progressMessage: null,
+        performanceAvailable: false,
+        evaluationAvailable: false,
+        previousFestivalId: null,
+        generatedAt: null,
+        jobId: null,
+      };
+    } else if (path.endsWith("/operations/visitors")) {
+      data = {
+        festivalId,
+        startDate: "2026-05-01",
+        endDate: "2026-05-02",
+        visitorCountInputMode: "UNSET",
+        days: [
+          {
+            visitDate: "2026-05-01",
+            dayIndex: 1,
+            visitorCount: null,
+            inputAllowed: true,
+            saved: false,
+          },
+          {
+            visitDate: "2026-05-02",
+            dayIndex: 2,
+            visitorCount: null,
+            inputAllowed: true,
+            saved: false,
+          },
+        ],
+        filledDayCount: 0,
+        totalDayCount: 2,
+        allDaysFilled: false,
+        sumVisitorCount: 0,
+        totalOverrideVisitorCount: null,
+        totalSaved: false,
+        effectiveVisitorCount: null,
+        effectiveSource: "NONE",
+        effectiveStatus: "UNSET",
+        difference: null,
+        reportReadyToGenerate: false,
+      };
+    } else if (path.endsWith("/operations/visitors/total")) {
+      saved.push(`${request.method()} ${path}`);
+      data = null;
+    }
+    await route.fulfill(
+      data === undefined
+        ? {
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({ code: 404, message: "NOT_FOUND", data: null }),
+          }
+        : ok(data),
+    );
+  });
+
+  await page.goto(reportPath);
+
+  // 집계 방식을 고르기 전에는 입력 필드도, 활성화된 입력하기 버튼도 없다.
+  const submit = page.getByRole("button", { name: "입력하기" });
+  await expect(page.getByRole("radio", { name: "총합 입력" })).toBeVisible();
+  await expect(submit).toBeDisabled();
+
+  await page.getByRole("radio", { name: "총합 입력" }).click();
+  await page.getByLabel("총 방문객").fill("51194");
+  await expect(submit).toBeEnabled();
+  await submit.click();
+
+  // 축제 수정 API는 부르지 않고, 총합 저장으로 백엔드가 집계 방식을 잠그게 둔다.
+  await expect
+    .poll(() => saved)
+    .toEqual([`PUT /api/festivals/${festivalId}/operations/visitors/total`]);
 });

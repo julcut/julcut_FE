@@ -6,15 +6,22 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { VisitorCountModeField } from "@/features/festivals/VisitorCountModeField";
+import type { FestivalVisitorCountInputMode } from "@/features/festivals/types";
 import type { FestivalVisitorDay } from "./types";
 
 export interface VisitorCountFormProps {
   /** 백엔드가 반환한 축제 기간별 방문 인원 입력 상태 */
   days: FestivalVisitorDay[];
-  mode: "DAILY" | "TOTAL";
+  /**
+   * 축제에 저장된 집계 방식. "UNSET"이면 이 폼 안에서 먼저 총합/일자별을 고른다 —
+   * 화면설계서상 집계 방식 선택은 축제 종료 후 결과리포트 첫 진입에서 한다.
+   */
+  mode: "DAILY" | "TOTAL" | "UNSET";
   initialTotal?: number | null;
   isPending?: boolean;
-  onSubmit: (value: number[] | number) => void;
+  /** 집계 방식이 UNSET이었다면 여기서 고른 방식이 함께 넘어온다. */
+  onSubmit: (value: number[] | number, mode: FestivalVisitorCountInputMode) => void;
   /**
    * 입력을 포기하고 화면을 벗어날 때 호출된다.
    * 이 폼은 딤 오버레이 + 상단 탭 숨김 상태로 뜨기 때문에,
@@ -35,12 +42,20 @@ export function VisitorCountForm({
     days.map((day) => day.visitorCount?.toString() ?? ""),
   );
   const [totalCount, setTotalCount] = useState(initialTotal?.toString() ?? "");
+  // 축제에 집계 방식이 저장돼 있으면 그대로 쓰고, UNSET이면 사용자가 고를 때까지 null.
+  const [pickedMode, setPickedMode] = useState<FestivalVisitorCountInputMode | null>(
+    mode === "UNSET" ? null : mode,
+  );
   const editableDayIndexes = days.flatMap((day, index) => (day.inputAllowed ? [index] : []));
 
-  const dailyValid = editableDayIndexes.every((index) => {
-    const value = dailyCounts[index];
-    return value.trim() !== "" && Number(value) >= 0;
-  });
+  // 백엔드는 지난 일자(일일마감된 일자)만 입력을 허용한다. 아직 마감된 일자가
+  // 하나도 없으면 저장할 것이 없으므로 제출을 막는다.
+  const dailyValid =
+    editableDayIndexes.length > 0 &&
+    editableDayIndexes.every((index) => {
+      const value = dailyCounts[index];
+      return value.trim() !== "" && Number(value) >= 0;
+    });
   const dailyTotal = dailyCounts.reduce((sum, value) => sum + (Number(value) || 0), 0);
 
   function numbersOnly(value: string) {
@@ -48,15 +63,20 @@ export function VisitorCountForm({
   }
 
   function handleSubmit() {
-    if (mode === "TOTAL") {
+    if (!pickedMode) return;
+    if (pickedMode === "TOTAL") {
       if (totalCount.trim() === "") return;
-      onSubmit(Number(totalCount));
+      onSubmit(Number(totalCount), pickedMode);
       return;
     }
-    if (dailyValid) onSubmit(dailyCounts.map(Number));
+    if (dailyValid) onSubmit(dailyCounts.map(Number), pickedMode);
   }
 
-  const valid = mode === "TOTAL" ? totalCount.trim() !== "" : dailyValid;
+  const valid = !pickedMode
+    ? false
+    : pickedMode === "TOTAL"
+      ? totalCount.trim() !== ""
+      : dailyValid;
 
   return (
     <div className="w-[480px] max-w-full overflow-hidden rounded-2xl border border-zinc-300 bg-white">
@@ -81,7 +101,14 @@ export function VisitorCountForm({
 
       <div className="flex flex-col gap-6 border-t border-zinc-200 p-5 sm:p-8">
         <div className="flex flex-col gap-5">
-          {mode === "TOTAL" ? (
+          {mode === "UNSET" ? (
+            <VisitorCountModeField
+              label="방문 인원 집계 방식"
+              value={pickedMode}
+              onChange={setPickedMode}
+            />
+          ) : null}
+          {!pickedMode ? null : pickedMode === "TOTAL" ? (
             <Input
               label="총 방문객"
               inputMode="numeric"
@@ -95,6 +122,7 @@ export function VisitorCountForm({
                 key={days[index].visitDate}
                 label={`${days[index].dayIndex}일차`}
                 disabled={!days[index].inputAllowed}
+                helperText={days[index].inputAllowed ? undefined : "마감 후 입력할 수 있어요"}
                 inputMode="numeric"
                 placeholder="방문인원을 입력해 주세요"
                 value={value ? Number(value).toLocaleString() : ""}
@@ -106,7 +134,7 @@ export function VisitorCountForm({
               />
             ))
           )}
-          {mode === "DAILY" ? (
+          {pickedMode === "DAILY" ? (
             <Input
               label="총합"
               disabled

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import type { FestivalVisitorCountInputMode } from "@/features/festivals/types";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { useConsoleUiStore } from "@/store/consoleUiStore";
 import {
@@ -38,20 +39,26 @@ export function ReportFlow({ festivalId }: { festivalId: string }) {
   const isGenerationBroken = generationStatus === "FAILED" || generationStatus === "CANCELLED";
   const showForm =
     !isGenerating && generationStatus !== "COMPLETED" && (!isGenerationBroken || reinputRequested);
-  const visitorModeUnset = visitorsQuery.data?.visitorCountInputMode === "UNSET";
   const closeForm = useCallback(() => {
     setReinputRequested(false);
     router.push(`/console/festivals/${festivalId}`);
   }, [festivalId, router]);
 
   useEffect(() => {
-    // 집계 방식 미설정 안내 화면에서는 축제 정보로 빠져나가야 하므로 상단 탭을 남겨둔다.
-    setHideNav((showForm && !visitorModeUnset) || isGenerating);
+    setHideNav(showForm || isGenerating);
     return () => setHideNav(false);
-  }, [isGenerating, setHideNav, showForm, visitorModeUnset]);
+  }, [isGenerating, setHideNav, showForm]);
 
   const submitMutation = useMutation({
-    mutationFn: async (value: number[] | number) => {
+    // 집계 방식이 UNSET이면 축제 수정 API로 따로 저장하지 않는다 —
+    // 백엔드가 첫 입력(일자별/총합)을 받는 순간 그 방식으로 축제를 자동으로 잠근다.
+    // 축제 수정 PATCH는 장소 목록까지 전부 다시 보내야 해서 여기서 부를 이유가 없다.
+    mutationFn: async ({
+      value,
+    }: {
+      value: number[] | number;
+      mode: FestivalVisitorCountInputMode;
+    }) => {
       if (typeof value === "number") {
         await updateTotalVisitorCount(festivalId, value);
         await generateFestivalReport(festivalId);
@@ -75,6 +82,7 @@ export function ReportFlow({ festivalId }: { festivalId: string }) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["festival-visitor-counts", festivalId] }),
         queryClient.invalidateQueries({ queryKey: ["festival-report-status", festivalId] }),
+        queryClient.invalidateQueries({ queryKey: ["managed-festival", festivalId] }),
       ]);
     },
   });
@@ -92,20 +100,6 @@ export function ReportFlow({ festivalId }: { festivalId: string }) {
   if (error) return <p className="body-small col-span-3 text-error">{getApiErrorMessage(error)}</p>;
 
   if (showForm && visitorsQuery.data) {
-    if (visitorsQuery.data.visitorCountInputMode === "UNSET") {
-      return (
-        <div className="col-span-3 flex flex-col items-start gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
-          <p className="body-large-bold text-zinc-950">방문 인원 집계 방식이 설정되지 않았습니다</p>
-          <p className="body-small text-zinc-500">
-            축제 정보에서 방문 인원 집계 방식(일자별/총합)을 먼저 선택해야 결과 리포트를 만들 수
-            있습니다.
-          </p>
-          <Button type="button" onClick={() => router.push(`/console/festivals/${festivalId}`)}>
-            축제 정보 수정하러 가기
-          </Button>
-        </div>
-      );
-    }
     return (
       <div className="fixed inset-x-0 top-[72px] bottom-0 z-10 flex items-center justify-center overflow-y-auto bg-dimmed p-4 sm:p-8">
         <VisitorCountForm
@@ -113,7 +107,7 @@ export function ReportFlow({ festivalId }: { festivalId: string }) {
           mode={visitorsQuery.data.visitorCountInputMode}
           initialTotal={visitorsQuery.data.totalOverrideVisitorCount}
           isPending={submitMutation.isPending}
-          onSubmit={(counts) => submitMutation.mutate(counts)}
+          onSubmit={(value, mode) => submitMutation.mutate({ value, mode })}
           onClose={closeForm}
         />
       </div>
@@ -166,7 +160,10 @@ export function ReportFlow({ festivalId }: { festivalId: string }) {
 
   return (
     <div className="col-span-3">
-      <ReportPanel festivalId={festivalId} />
+      <ReportPanel
+        festivalId={festivalId}
+        previousFestivalId={statusQuery.data?.previousFestivalId ?? null}
+      />
     </div>
   );
 }
