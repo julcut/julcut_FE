@@ -74,16 +74,16 @@ export function QueueUpdateSheet({
   });
 
   return (
-    <div className="border-t border-zinc-200 bg-white px-5 py-4">
-      <div className="relative flex items-center justify-center border-b border-zinc-200 pb-3">
-        <p className="body-regular-bold truncate px-8 text-center text-zinc-950">{booth.name}</p>
+    // 화면설계서 EDIT01: 지도 위에 화면 폭 전체로 올라오는 하단 모달.
+    <div className="absolute inset-x-0 bottom-0 z-20 rounded-t-2xl border-t border-zinc-200 bg-white px-4 pt-3 pb-8 shadow-lg">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 pb-3">
+        <p className="body-regular-bold min-w-0 truncate text-zinc-950">{booth.name}</p>
         <IconButton
           variant="ghost"
           size="sm"
           aria-label="닫기"
           icon={<Cross2Icon />}
           onClick={onClose}
-          className="absolute right-0"
         />
       </div>
 
@@ -118,9 +118,6 @@ export function QueueUpdateSheet({
         <div className="flex items-center justify-between">
           <dt className="body-small text-zinc-950">마지막 줄끝갱신자</dt>
           <dd className="flex items-center gap-2">
-            <span className="body-caption text-zinc-500">
-              {formatRelativeTime(queue.updatedAt)}
-            </span>
             {queue.lastModifierType ? (
               <>
                 {queue.lastModifierName ? (
@@ -136,7 +133,7 @@ export function QueueUpdateSheet({
       </dl>
 
       <form
-        className="mt-4 flex items-center gap-2"
+        className="mt-6 flex items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           updateMutation.mutate();

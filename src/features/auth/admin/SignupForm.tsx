@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/Input";
 import { getApiErrorMessage } from "@/lib/api/httpError";
+import { AccountKindTabs } from "./AccountKindTabs";
 import {
   confirmEmailVerification,
   requestEmailVerification,
@@ -130,30 +131,9 @@ export function SignupForm({ initialAccountKind = "GOVERNMENT", onComplete }: Si
     <AuthCard title="회원가입">
       {step === "agree" && (
         <div className="mt-8 flex flex-col">
-          <div className="rounded-lg bg-zinc-100 p-1">
-            <div className="grid grid-cols-2 gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                selected={accountKind === "GOVERNMENT"}
-                className={accountKind === "GOVERNMENT" ? "bg-white" : ""}
-                onClick={() => setAccountKind("GOVERNMENT")}
-              >
-                공무원
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                selected={accountKind === "CONTRACTOR"}
-                className={accountKind === "CONTRACTOR" ? "bg-white" : ""}
-                onClick={() => setAccountKind("CONTRACTOR")}
-              >
-                일반
-              </Button>
-            </div>
-          </div>
+          <AccountKindTabs value={accountKind} onChange={setAccountKind} />
 
-          <label className="flex cursor-pointer items-center gap-2 py-2">
+          <label className="mt-6 flex cursor-pointer items-center gap-2 py-4">
             <Checkbox
               checked={allAgreed}
               onCheckedChange={(checked) => toggleAll(checked === true)}
@@ -161,7 +141,7 @@ export function SignupForm({ initialAccountKind = "GOVERNMENT", onComplete }: Si
             <span className="body-large-bold text-zinc-950">전체 동의하기</span>
           </label>
 
-          <div className="mt-2 flex flex-col divide-y divide-zinc-200">
+          <div className="flex flex-col divide-y divide-zinc-200">
             {AGREEMENT_ITEMS.map((item) => (
               <div key={item.key} className="flex items-center justify-between py-4">
                 <label className="flex cursor-pointer items-center gap-2">
@@ -191,7 +171,7 @@ export function SignupForm({ initialAccountKind = "GOVERNMENT", onComplete }: Si
             type="button"
             size="lg"
             disabled={!allAgreed}
-            className="mt-8 w-full"
+            className="mt-6 w-full"
             onClick={() => setStep("email")}
           >
             다음
@@ -290,65 +270,72 @@ export function SignupForm({ initialAccountKind = "GOVERNMENT", onComplete }: Si
 
       {step === "profile" && (
         <form
-          className="mt-8 flex flex-col gap-5"
+          className="mt-8 flex flex-col gap-6"
           onSubmit={(event) => {
             event.preventDefault();
             signupMutation.mutate();
           }}
         >
-          <Input type="email" disabled label="이메일" value={email} />
-          <Input
-            type="password"
-            required
-            minLength={8}
-            maxLength={100}
-            label="비밀번호"
-            placeholder="비밀번호"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <Input
-            type="text"
-            required
-            minLength={2}
-            maxLength={100}
-            label="이름"
-            placeholder="이름"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
+          {/* 설계서는 회원정보 단계를 "계정정보"와 "사용자정보" 두 그룹으로
+              나누고 그룹 사이만 24px을 띄운다. 그룹 안쪽 간격은 20px이다. */}
+          <div className="flex flex-col gap-5">
+            <Input type="email" disabled label="이메일" value={email} />
+            <Input
+              type="password"
+              required
+              minLength={8}
+              maxLength={100}
+              label="비밀번호"
+              placeholder="비밀번호"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </div>
 
-          {isGovernment ? (
-            <div className="flex gap-3">
-              <Input
-                type="text"
-                required
-                label="과·팀"
-                placeholder="과·팀"
-                value={organization}
-                onChange={(event) => setOrganization(event.target.value)}
-              />
-              <Input
-                type="text"
-                required
-                label="직급"
-                placeholder="직급"
-                value={rank}
-                onChange={(event) => setRank(event.target.value)}
-              />
-            </div>
-          ) : (
+          <div className="flex flex-col gap-5">
             <Input
               type="text"
               required
               minLength={2}
-              maxLength={255}
-              label="업체명"
-              placeholder="업체명"
-              value={organization}
-              onChange={(event) => setOrganization(event.target.value)}
+              maxLength={100}
+              label="이름"
+              placeholder="이름"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
             />
-          )}
+
+            {isGovernment ? (
+              <div className="flex gap-3">
+                <Input
+                  type="text"
+                  required
+                  label="과·팀"
+                  placeholder="과·팀"
+                  value={organization}
+                  onChange={(event) => setOrganization(event.target.value)}
+                />
+                <Input
+                  type="text"
+                  required
+                  label="직급"
+                  placeholder="직급"
+                  value={rank}
+                  onChange={(event) => setRank(event.target.value)}
+                />
+              </div>
+            ) : (
+              <Input
+                type="text"
+                required
+                minLength={2}
+                maxLength={255}
+                label="업체명"
+                placeholder="업체명"
+                value={organization}
+                onChange={(event) => setOrganization(event.target.value)}
+              />
+            )}
+          </div>
 
           {signupMutation.isError && (
             <p className="body-small text-error">{getApiErrorMessage(signupMutation.error)}</p>

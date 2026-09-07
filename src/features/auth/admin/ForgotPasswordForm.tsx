@@ -14,14 +14,15 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthCard title="비밀번호 찾기">
-      <p className="body-regular mt-2 text-center text-zinc-950">
-        공무원·외부업자 모두 가입한 이메일을 입력해 주세요.
+      <p className="body-regular mt-8 text-zinc-950">
+        가입한 이메일 주소를 입력해 주세요.
         <br />
         비밀번호 재설정 링크를 보내드립니다.
       </p>
 
+      {/* 설계서상 안내 문구와 인풋 사이는 16px, 인풋과 CTA 사이는 24px이다. */}
       <form
-        className="mt-8 flex flex-col gap-5"
+        className="mt-4 flex flex-col gap-6"
         onSubmit={(event) => {
           event.preventDefault();
           mutation.mutate();

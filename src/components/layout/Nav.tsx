@@ -66,9 +66,8 @@ function buildDefaultItems(
     { label: "대시보드", href: `${festivalBase}/dashboard` },
     { label: "운영자관리", href: `${festivalBase}/operators` },
     { label: "스태프관리", href: `${festivalBase}/staffs` },
-    // 축제 종료 여부(progressStatus)는 Nav로 전달되지 않아 진행 상태와 무관하게 항상 노출한다.
-    // 리포트 화면 자체가 방문 인원 입력·생성 상태를 안내하므로 진입 시점 제한은 두지 않는다.
-    { label: "결과리포트", href: `${festivalBase}/report` },
+    // 결과리포트는 상시 메뉴가 아니다. 화면설계서상 일일마감 후 방문 인원 입력과
+    // 축제 종료 후 첫 진입에서 열리는 흐름이라 Nav 탭으로 두지 않는다.
   ];
 }
 

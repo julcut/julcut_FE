@@ -1,8 +1,9 @@
 "use client";
 
-import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
+import { Map, CustomOverlayMap } from "react-kakao-maps-sdk";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { IconButton } from "@/components/ui/IconButton";
+import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
 import type { Booth } from "./types";
 
 /** 지도 마커 위에 뜨는 부스 상세정보 말풍선. 아래쪽 중앙에서 마커를 향해 뾰족한 꼬리가 이어진다. */
@@ -55,9 +56,7 @@ export function BoothMapView({
   /** 마커를 누르면 상세 말풍선을 띄울지 여부. 선택 정보를 하단바로 보여주는 화면에서는 끈다. */
   showPopup?: boolean;
 }) {
-  const [loading, error] = useKakaoLoader({
-    appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "",
-  });
+  const [loading, error] = useKakaoMapLoader();
 
   if (!process.env.NEXT_PUBLIC_KAKAO_MAP_KEY) {
     return (

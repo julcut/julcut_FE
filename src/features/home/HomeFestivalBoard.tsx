@@ -77,8 +77,9 @@ function FestivalCard({ festival }: { festival: FestivalSummary }) {
       href={getFestivalHref(festival)}
       className="flex w-full min-w-0 flex-col gap-2 px-5 py-4 transition-colors hover:bg-zinc-50"
     >
-      <div className="flex min-w-0 items-start gap-2">
-        <p className="body-regular-bold min-w-0 flex-1 wrap-anywhere text-zinc-950">
+      {/* 설계서상 역할 뱃지는 카드 우측 끝이 아니라 축제명 바로 옆에 붙는다. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <p className="body-regular-bold min-w-0 wrap-anywhere text-zinc-950">
           {festival.festivalName}
         </p>
         <span className="shrink-0">
