@@ -28,7 +28,12 @@ import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/httpError";
 import { useConsoleUiStore } from "@/store/consoleUiStore";
 import { cn } from "@/lib/utils";
 import { ensureCoordinateMap, getMapEditor, replaceFestivalMap, saveMapEditor } from "./api";
-import { boothMapPinsToNodeChanges, nodeToLocalBooth, type LocalBoothPin } from "./geometryWgs84";
+import {
+  boothIdsToNodeIds,
+  boothMapPinsToNodeChanges,
+  nodeToLocalBooth,
+  type LocalBoothPin,
+} from "./geometryWgs84";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { primaryFestivalCenter } from "./mapCenter";
 import type { NodeType } from "./types";
@@ -246,15 +251,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       return saveMapEditor(festivalId, mapQuery.data.mapId, {
         baseRevision: editRevision,
         nodes: boothMapPinsToNodeChanges(booths, deletedNodeIds),
-        zones: zones.map((zone, sortOrder) => ({
-          zoneId: zone.id,
-          name: zone.name,
-          sortOrder,
-          boothNodeIds: zone.boothIds.map((boothId) => {
-            const booth = booths.find((item) => item.id === boothId);
-            return booth?.nodeId ?? boothId;
-          }),
-        })),
+        zones: zones
+          .map((zone, sortOrder) => ({
+            zoneId: zone.id,
+            name: zone.name,
+            sortOrder,
+            boothNodeIds: boothIdsToNodeIds(zone.boothIds, booths),
+          }))
+          .filter((zone) => zone.boothNodeIds.length > 0),
       });
     },
     onSuccess: async (response) => {
@@ -650,6 +654,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       setDeletedNodeIds((prev) => [...prev, selectedBooth.nodeId!]);
                     }
                     setBooths((prev) => prev.filter((booth) => booth.id !== selectedBooth.id));
+                    setZones((prev) =>
+                      prev
+                        .map((zone) => ({
+                          ...zone,
+                          boothIds: zone.boothIds.filter((id) => id !== selectedBooth.id),
+                        }))
+                        .filter((zone) => zone.boothIds.length > 0),
+                    );
                     setCheckedIds(new Set());
                     setEditingBoothId(null);
                     setSelectedZoneId(null);
