@@ -4,6 +4,7 @@ import { PersonIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Bottombar } from "@/components/ui/Bottombar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +41,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
   const createMutation = useMutation({
     mutationFn: () => createFieldStaff(festivalId, { loginId, name, phoneNumber }),
     onSuccess: (result) => {
+      toast.success(`${result.name} 스태프를 추가했습니다.`);
       setCreated(result);
       setName("");
       setPhoneNumber("");
@@ -50,10 +52,14 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
 
   const deleteMutation = useMutation({
     mutationFn: (staffIds: string[]) => deleteFieldStaffBulk(festivalId, staffIds),
-    onSuccess: () => {
+    onSuccess: (_result, staffIds) => {
+      toast.success(`스태프 ${staffIds.length}명을 삭제했습니다.`);
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["field-staff", festivalId] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "스태프를 삭제하지 못했습니다."));
     },
   });
 

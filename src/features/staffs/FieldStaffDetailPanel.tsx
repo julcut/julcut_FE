@@ -2,8 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { TemporaryPasswordCard } from "@/components/ui/TemporaryPasswordCard";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import {
   getFieldStaff,
@@ -36,6 +39,8 @@ export function FieldStaffDetailPanel({
   const [name, setName] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [reissueOpen, setReissueOpen] = useState(false);
   const staffQuery = useQuery({
     queryKey: ["field-staff", festivalId, staffId],
     queryFn: () => getFieldStaff(festivalId, staffId),
@@ -53,18 +58,36 @@ export function FieldStaffDetailPanel({
       });
     },
     onSuccess: () => {
+      toast.success("스태프 정보를 저장했습니다.");
       setName(null);
       setPhoneNumber(null);
       invalidateStaff();
     },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, "스태프 정보를 저장하지 못했습니다.")),
   });
   const statusMutation = useMutation({
     mutationFn: (active: boolean) => updateFieldStaffStatus(festivalId, staffId, active),
-    onSuccess: invalidateStaff,
+    onSuccess: (_result, active) => {
+      toast.success(
+        active
+          ? "스태프 계정을 활성화했습니다."
+          : "스태프 계정을 비활성화했습니다. 해당 스태프는 더 이상 로그인할 수 없습니다.",
+      );
+      setDeactivateOpen(false);
+      invalidateStaff();
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "상태를 변경하지 못했습니다.")),
   });
   const passwordMutation = useMutation({
     mutationFn: () => reissueFieldStaffPassword(festivalId, staffId),
-    onSuccess: (result) => setTemporaryPassword(result.temporaryPassword),
+    onSuccess: (result) => {
+      toast.success("임시 비밀번호를 재발급했습니다.");
+      setTemporaryPassword(result.temporaryPassword);
+      setReissueOpen(false);
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, "임시 비밀번호를 재발급하지 못했습니다.")),
   });
 
   /** 직전 작업의 에러·임시 비밀번호가 다음 작업 결과와 섞여 보이지 않도록 먼저 지운다. */
@@ -84,6 +107,8 @@ export function FieldStaffDetailPanel({
   }
 
   if (!staff) return null;
+
+  const isActive = staff.status === "ACTIVE";
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border px-4 py-3">
@@ -138,26 +163,33 @@ export function FieldStaffDetailPanel({
           disabled={statusMutation.isPending}
           onClick={() => {
             resetActionResults();
-            statusMutation.mutate(staff.status !== "ACTIVE");
+            // 비활성화는 해당 스태프가 로그인할 수 없게 되므로 먼저 확인받는다.
+            if (isActive) {
+              setDeactivateOpen(true);
+              return;
+            }
+            statusMutation.mutate(true);
           }}
         >
-          {staff.status === "ACTIVE" ? "비활성화" : "활성화"}
+          {isActive ? "비활성화" : "활성화"}
         </Button>
         <Button
           variant="outline"
           disabled={passwordMutation.isPending}
           onClick={() => {
             resetActionResults();
-            passwordMutation.mutate();
+            setReissueOpen(true);
           }}
         >
           임시 비밀번호 재발급
         </Button>
       </div>
       {temporaryPassword ? (
-        <p className="body-small rounded-md bg-zinc-50 p-3">
-          새 임시 비밀번호: <span className="font-mono">{temporaryPassword}</span>
-        </p>
+        <TemporaryPasswordCard
+          title={`${staff.name}(${staff.loginId}) 스태프의 임시 비밀번호가 재발급되었습니다.`}
+          temporaryPassword={temporaryPassword}
+          warning="임시 비밀번호는 지금만 확인할 수 있습니다. 스태프에게 바로 전달해주세요."
+        />
       ) : null}
       {updateMutation.isError || statusMutation.isError || passwordMutation.isError ? (
         <p className="body-small text-error">
@@ -166,6 +198,27 @@ export function FieldStaffDetailPanel({
           )}
         </p>
       ) : null}
+
+      <ConfirmDialog
+        open={deactivateOpen}
+        onOpenChange={setDeactivateOpen}
+        title="스태프 계정을 비활성화하시겠습니까?"
+        description="비활성화하면 해당 스태프는 현장에서 로그인할 수 없습니다. 언제든 다시 활성화할 수 있습니다."
+        confirmLabel="비활성화"
+        onConfirm={() => statusMutation.mutate(false)}
+        confirmPending={statusMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={reissueOpen}
+        onOpenChange={setReissueOpen}
+        title="임시 비밀번호를 재발급하시겠습니까?"
+        description="재발급하면 기존 비밀번호는 즉시 사용할 수 없습니다. 새 임시 비밀번호는 재발급 직후 한 번만 확인할 수 있습니다."
+        confirmLabel="재발급"
+        confirmVariant="primary"
+        onConfirm={() => passwordMutation.mutate()}
+        confirmPending={passwordMutation.isPending}
+      />
     </div>
   );
 }
