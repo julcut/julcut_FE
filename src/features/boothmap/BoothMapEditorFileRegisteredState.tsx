@@ -251,14 +251,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       return saveMapEditor(festivalId, mapQuery.data.mapId, {
         baseRevision: editRevision,
         nodes: boothMapPinsToNodeChanges(booths, deletedNodeIds),
-        zones: zones
-          .map((zone, sortOrder) => ({
-            zoneId: zone.id,
-            name: zone.name,
-            sortOrder,
-            boothNodeIds: boothIdsToNodeIds(zone.boothIds, booths),
-          }))
-          .filter((zone) => zone.boothNodeIds.length > 0),
+        // 아직 부스를 담지 않은 구역도 그대로 보낸다. 걸러내면 구역을 먼저
+        // 만들어 두고 부스를 채우는 순서에서 구역이 저장과 함께 사라진다.
+        zones: zones.map((zone, sortOrder) => ({
+          zoneId: zone.id,
+          name: zone.name,
+          sortOrder,
+          boothNodeIds: boothIdsToNodeIds(zone.boothIds, booths),
+        })),
       });
     },
     onSuccess: async (response) => {
