@@ -3,9 +3,12 @@
 import { PersonIcon } from "@radix-ui/react-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { TemporaryPasswordCard } from "@/components/ui/TemporaryPasswordCard";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { deleteSubAdmins, getSubAdmins, registerOperator } from "./api";
 import type { RegisterOperatorResult } from "./types";
@@ -16,6 +19,7 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
   const [companyName, setCompanyName] = useState("");
   const [created, setCreated] = useState<RegisterOperatorResult | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const subAdminsQuery = useQuery({
@@ -57,10 +61,13 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
 
   const deleteMutation = useMutation({
     mutationFn: (adminIds: string[]) => deleteSubAdmins(festivalId, adminIds),
-    onSuccess: () => {
+    onSuccess: (_data, adminIds) => {
       setSelectedIds(new Set());
+      setDeleteDialogOpen(false);
+      toast.success(`운영자 ${adminIds.length}명을 삭제했습니다.`);
       queryClient.invalidateQueries({ queryKey: ["sub-admins", festivalId] });
     },
+    onError: (error) => toast.error(getApiErrorMessage(error, "운영자 삭제에 실패했습니다.")),
   });
 
   return (
@@ -69,27 +76,20 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
         <div className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white p-6">
           <p className="body-large-bold text-zinc-950">운영자 추가</p>
 
-          {created ? (
+          {created?.created && created.temporaryPassword ? (
+            <TemporaryPasswordCard
+              title={`${created.name}(${created.email}) 계정이 생성되었습니다.`}
+              temporaryPassword={created.temporaryPassword}
+              warning="임시 비밀번호는 지금만 확인할 수 있습니다. 운영자에게 바로 전달해주세요."
+            />
+          ) : null}
+
+          {created && !(created.created && created.temporaryPassword) ? (
             <div className="flex flex-col gap-1 rounded-lg bg-zinc-50 px-4 py-3">
-              {created.created ? (
-                <>
-                  <p className="body-small-bold text-zinc-950">
-                    {created.name}({created.email}) 계정이 생성되었습니다.
-                  </p>
-                  {created.temporaryPassword ? (
-                    <p className="body-small text-zinc-950">
-                      임시 비밀번호: <span className="font-mono">{created.temporaryPassword}</span>
-                    </p>
-                  ) : null}
-                  <p className="body-caption text-zinc-500">
-                    임시 비밀번호는 지금만 확인할 수 있습니다. 운영자에게 바로 전달해주세요.
-                  </p>
-                </>
-              ) : (
-                <p className="body-small-bold text-zinc-950">
-                  {created.name}({created.email}) 계정을 운영자로 추가했습니다.
-                </p>
-              )}
+              <p className="body-small-bold text-zinc-950">
+                {created.name}({created.email}) 계정을{" "}
+                {created.created ? "생성했습니다." : "운영자로 추가했습니다."}
+              </p>
             </div>
           ) : null}
 
@@ -205,12 +205,21 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
             type="button"
             variant="destructive"
             disabled={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate([...selectedIds])}
+            onClick={() => setDeleteDialogOpen(true)}
           >
             삭제하기
           </Button>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={`선택한 운영자 ${selectedIds.size}명을 삭제하시겠습니까?`}
+        description="삭제한 운영자는 이 축제를 더 이상 관리할 수 없습니다."
+        onConfirm={() => deleteMutation.mutate([...selectedIds])}
+        confirmPending={deleteMutation.isPending}
+      />
     </div>
   );
 }
