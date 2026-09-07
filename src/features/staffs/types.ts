@@ -5,6 +5,11 @@ export interface FieldStaff {
   loginId: string;
   name: string;
   phoneNumber: string;
+  /**
+   * 근무구역(근무부서). 백엔드 `FieldStaffResponse`에 아직 없는 필드라 지금은
+   * 항상 undefined로 내려온다 — 백엔드가 컬럼을 추가하면 그대로 표시된다.
+   */
+  department?: string;
   validFrom: string;
   validUntil: string;
   status: FieldStaffStatus;
