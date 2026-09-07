@@ -27,6 +27,15 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
     },
   });
 
+  /** 계정 종류를 바꾸면 앞서 입력한 값은 다른 계정의 것이므로 비운다. */
+  const selectAccountKind = (kind: AccountKind) => {
+    if (kind === accountKind) return;
+    setAccountKind(kind);
+    setEmail("");
+    setPassword("");
+    loginMutation.reset();
+  };
+
   return (
     <AuthCard title="로그인">
       {sessionExpired ? (
@@ -52,7 +61,7 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
                   ? "rounded-none bg-white text-zinc-950 hover:bg-white"
                   : "rounded-none text-zinc-400"
               }
-              onClick={() => setAccountKind("GOVERNMENT")}
+              onClick={() => selectAccountKind("GOVERNMENT")}
             >
               공무원
             </Button>
@@ -65,7 +74,7 @@ export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean
                   ? "rounded-none bg-white text-zinc-950 hover:bg-white"
                   : "rounded-none text-zinc-400"
               }
-              onClick={() => setAccountKind("CONTRACTOR")}
+              onClick={() => selectAccountKind("CONTRACTOR")}
             >
               일반
             </Button>
