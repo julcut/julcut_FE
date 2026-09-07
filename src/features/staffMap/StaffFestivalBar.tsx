@@ -13,7 +13,7 @@ export interface StaffFestivalBarProps {
   busiestBooth: Booth | null;
 }
 
-/** 부스를 선택하지 않았을 때 지도 아래에 붙는 축제 전체 요약 바. */
+/** 부스를 선택하지 않았을 때 지도 위에 떠 있는 축제 전체 요약 카드. */
 export function StaffFestivalBar({
   title,
   congestionLevel,
@@ -21,10 +21,10 @@ export function StaffFestivalBar({
   busiestBooth,
 }: StaffFestivalBarProps) {
   return (
-    <div className="border-t border-zinc-200 bg-white px-5 py-4">
+    <div className="absolute inset-x-5 bottom-5 z-10 rounded-2xl bg-white p-4 shadow-lg">
       <p className="body-small-bold text-zinc-950">{title}</p>
 
-      <div className="mt-2 flex items-start gap-6">
+      <div className="mt-2 flex items-start gap-5">
         <MapMetric
           value={
             congestionLevel ? (

@@ -18,7 +18,7 @@ export interface StaffBoothBarProps {
   onUpdateQueue: () => void;
 }
 
-/** 부스를 선택했을 때 지도 아래에 붙는 부스 요약 바. */
+/** 부스를 선택했을 때 지도 위에 떠 있는 부스 요약 카드. */
 export function StaffBoothBar({
   booth,
   zoneName,
@@ -27,7 +27,7 @@ export function StaffBoothBar({
   onUpdateQueue,
 }: StaffBoothBarProps) {
   return (
-    <div className="border-t border-zinc-200 bg-white px-5 py-4">
+    <div className="absolute inset-x-5 bottom-5 z-10 rounded-2xl bg-white p-4 shadow-lg">
       <div className="flex items-start justify-between gap-3">
         <MapMetric
           value={
@@ -53,7 +53,7 @@ export function StaffBoothBar({
         </Button>
       </div>
 
-      <div className="mt-3 flex items-start gap-6">
+      <div className="mt-2 flex items-start gap-5">
         <MapMetric
           value={
             booth.congestionLevel ? (

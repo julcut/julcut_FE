@@ -83,27 +83,26 @@ export function StaffMapPanel() {
     return <StaffMapState message="지도에 표시할 부스 좌표가 없습니다." />;
   }
 
+  // 화면설계서 MAIN01/EDIT01은 지도를 화면 전체로 깔고 그 위에 하단바·줄끝갱신 모달을 얹는다.
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1">
-        <BoothMapView
-          booths={festival.booths}
-          selectedBooth={selectedBooth}
-          onSelectBooth={(booth) => {
-            setSelectedBoothId(booth?.boothId ?? null);
-            setQueueSheetOpen(false);
-          }}
-          showPopup={false}
-          zoomStep={zoomStep}
-          center={festival.mapCenter}
-        />
+    <div className="relative min-h-0 flex-1">
+      <BoothMapView
+        booths={festival.booths}
+        selectedBooth={selectedBooth}
+        onSelectBooth={(booth) => {
+          setSelectedBoothId(booth?.boothId ?? null);
+          setQueueSheetOpen(false);
+        }}
+        showPopup={false}
+        zoomStep={zoomStep}
+        center={festival.mapCenter}
+      />
 
-        <MapZoomControls
-          className="absolute top-4 left-4 z-10 [&_button]:shadow-md"
-          onZoomIn={() => setZoomStep((step) => step - 1)}
-          onZoomOut={() => setZoomStep((step) => step + 1)}
-        />
-      </div>
+      <MapZoomControls
+        className="absolute top-5 left-5 z-10 [&_button]:size-9 [&_button]:shadow-md"
+        onZoomIn={() => setZoomStep((step) => step - 1)}
+        onZoomOut={() => setZoomStep((step) => step + 1)}
+      />
 
       {selectedBooth && selectedQueue && queueSheetOpen ? (
         <QueueUpdateSheet
