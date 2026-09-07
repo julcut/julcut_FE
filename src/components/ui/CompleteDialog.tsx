@@ -32,7 +32,7 @@ export function CompleteDialog({
     <Dialog.Root open modal={false}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-x-0 top-[72px] bottom-0 z-30 bg-dimmed" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-30 flex w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-2xl bg-white p-8">
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-30 flex max-h-[calc(100dvh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col items-center overflow-y-auto rounded-2xl bg-white p-5 sm:p-8">
           <div className="size-[75px] rounded-full bg-zinc-200" />
 
           <Dialog.Title className="heading-regular mt-2 text-center text-zinc-950">

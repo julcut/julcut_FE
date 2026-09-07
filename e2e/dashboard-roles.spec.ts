@@ -86,7 +86,7 @@ async function mockDashboard(
 }
 
 for (const scenario of [
-  { name: "총괄관리자", role: "FESTIVAL_OWNER", kind: "GOVERNMENT", menuCount: 4 },
+  { name: "총괄관리자", role: "FESTIVAL_OWNER", kind: "GOVERNMENT", menuCount: 5 },
   { name: "제2관리자", role: "SUB_ADMIN", kind: "GOVERNMENT", menuCount: 2 },
   { name: "외부업자", role: "SUB_ADMIN", kind: "CONTRACTOR", menuCount: 2 },
 ] as const) {
@@ -201,7 +201,7 @@ test("메인 축제 카드는 각 축제에서 본인이 맡은 역할의 화면
   await expect(page.getByRole("navigation").getByRole("link")).toHaveCount(2);
 });
 
-for (const suffix of ["", "/operators", "/operators/test-admin"]) {
+for (const suffix of ["", "/operators", "/operators/test-admin", "/report"]) {
   test(`제2관리자가 총괄 전용 ${suffix || "축제관리"} 주소에 접근하면 대시보드로 이동한다`, async ({
     page,
   }) => {
