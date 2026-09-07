@@ -13,6 +13,9 @@ adminApiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       useAdminAuthStore.getState().clearSession();
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/console")) {
+        window.location.replace("/login?expired=1");
+      }
     }
     return Promise.reject(error);
   },

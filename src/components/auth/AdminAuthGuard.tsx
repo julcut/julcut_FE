@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { getAdminProfile } from "@/features/auth/admin/api";
@@ -17,8 +18,14 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (profileQuery.data) setProfile(profileQuery.data);
-    if (profileQuery.isError) router.replace("/login");
-  }, [profileQuery.data, profileQuery.isError, router, setProfile]);
+    if (profileQuery.isError) {
+      router.replace(
+        isAxiosError(profileQuery.error) && profileQuery.error.response?.status === 401
+          ? "/login?expired=1"
+          : "/login",
+      );
+    }
+  }, [profileQuery.data, profileQuery.error, profileQuery.isError, router, setProfile]);
 
   if (!profileQuery.data) return null;
 
