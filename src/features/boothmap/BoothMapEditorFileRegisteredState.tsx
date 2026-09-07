@@ -282,6 +282,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             .filter((id): id is string => id !== null),
         })),
       );
+      // 저장된 상태를 새 기준으로 삼는다(다음 렌더에서 현재 스냅샷으로 다시 채워진다).
+      setSavedSnapshot(null);
       toast.success("부스맵이 저장되었습니다.");
     },
     onError: async (error) => {
@@ -336,6 +338,24 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     );
     setEditorInitialized(true);
   }
+
+  // 저장하지 않은 편집이 있는지. 브라우저 뒤로가기·탭 닫기로 작업이 사라지는 것을 막는 데 쓴다.
+  const currentSnapshot = useMemo(
+    () => JSON.stringify({ booths, zones, deletedNodeIds }),
+    [booths, zones, deletedNodeIds],
+  );
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  if (editorInitialized && savedSnapshot === null) {
+    setSavedSnapshot(currentSnapshot);
+  }
+  const hasUnsavedChanges = savedSnapshot !== null && savedSnapshot !== currentSnapshot;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
 
   function addBoothAt(lat: number, lng: number) {
     const id = crypto.randomUUID();
@@ -437,11 +457,18 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           dragBoothId && dragBoothId !== booth.id ? "hover:bg-zinc-100" : ""
         }`}
       >
-        <Checkbox
-          checked={checkedIds.has(booth.id)}
-          onCheckedChange={() => toggleChecked(booth.id)}
-          className="border-zinc-200"
-        />
+        {/* 구역 멤버는 서버가 부스만 받는다. 시설을 섞으면 저장 전체가 거부되므로 선택을 막는다. */}
+        <span
+          title={booth.nodeType === "BOOTH" ? undefined : "구역에는 부스만 묶을 수 있습니다."}
+          className="flex"
+        >
+          <Checkbox
+            checked={checkedIds.has(booth.id)}
+            onCheckedChange={() => toggleChecked(booth.id)}
+            disabled={booth.nodeType !== "BOOTH"}
+            className="border-zinc-200"
+          />
+        </span>
         <button
           type="button"
           onClick={() => {
@@ -480,6 +507,27 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             축제 장소에 위도·경도가 없으면 부스맵을 만들 수 없습니다. 축제관리에서 주소를 다시
             검색해 좌표를 저장한 뒤 다시 시도해 주세요.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 편집 데이터를 못 불러왔는데 그대로 열면 "부스 0개"로 보인다.
+  // 그 상태에서 저장하면 서버에 있는 부스를 전부 지우는 요청이 나간다.
+  if (editorQuery.isError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-zinc-50 px-8">
+        <div className="max-w-md text-center">
+          <p className="body-regular-bold text-zinc-950">
+            {getApiErrorMessage(editorQuery.error, "부스 정보를 불러오지 못했습니다.")}
+          </p>
+          <p className="body-small mt-2 text-zinc-500">
+            편집 중인 부스가 사라지는 것을 막기 위해 편집기를 열지 않았습니다. 잠시 후 다시 시도해
+            주세요.
+          </p>
+          <Button type="button" className="mt-4" onClick={() => editorQuery.refetch()}>
+            다시 시도
+          </Button>
         </div>
       </div>
     );
@@ -688,7 +736,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                           const zone: LocalZone = {
                             id: createZoneId(),
                             name,
-                            boothIds: Array.from(checkedIds),
+                            // 부스가 아닌 노드가 섞이면 저장이 통째로 거부된다.
+                            boothIds: booths
+                              .filter(
+                                (booth) => checkedIds.has(booth.id) && booth.nodeType === "BOOTH",
+                              )
+                              .map((booth) => booth.id),
                           };
                           setZones((prev) => [...prev, zone]);
                           setExpandedZoneIds((prev) => new Set(prev).add(zone.id));
@@ -854,8 +907,13 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           >
             {replaceMutation.isPending ? "재업로드 중..." : "파일 재업로드"}
           </Button>
-          <Button type="button" variant="primary" onClick={() => setSaveDialogOpen(true)}>
-            저장하기
+          <Button
+            type="button"
+            variant="primary"
+            disabled={saveMutation.isPending}
+            onClick={() => setSaveDialogOpen(true)}
+          >
+            {saveMutation.isPending ? "저장 중..." : "저장하기"}
           </Button>
         </div>
         <IconButton
@@ -929,6 +987,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         title="저장하시겠습니까?"
         confirmLabel="저장"
         confirmVariant="primary"
+        confirmPending={saveMutation.isPending}
         onConfirm={() => {
           setSaveDialogOpen(false);
           saveMutation.mutate();

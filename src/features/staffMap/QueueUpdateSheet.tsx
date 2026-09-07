@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Cross2Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { CongestionText } from "@/components/ui/CongestionBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -61,7 +62,15 @@ export function QueueUpdateSheet({
         queueTailMeters: boothPoint ? distanceInMeters(boothPoint, zone.center) : undefined,
       });
     },
-    onSuccess: onUpdated,
+    onSuccess: () => {
+      toast.success("줄끝 위치를 갱신했습니다.");
+      onUpdated();
+      // 갱신된 값은 부스 바에서 다시 확인할 수 있으므로 시트는 닫는다.
+      onClose();
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "줄끝을 갱신하지 못했습니다."));
+    },
   });
 
   return (
