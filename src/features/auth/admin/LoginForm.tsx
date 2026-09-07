@@ -12,7 +12,7 @@ import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { loginAdmin } from "./api";
 import type { AccountKind } from "./types";
 
-export function LoginForm() {
+export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean }) {
   const router = useRouter();
   const setSession = useAdminAuthStore((state) => state.setSession);
   const [accountKind, setAccountKind] = useState<AccountKind>("GOVERNMENT");
@@ -29,6 +29,11 @@ export function LoginForm() {
 
   return (
     <AuthCard title="로그인">
+      {sessionExpired ? (
+        <p role="status" className="body-small mt-4 text-center text-zinc-600">
+          로그인이 만료되었습니다. 다시 로그인해 주세요.
+        </p>
+      ) : null}
       <form
         className="mt-8 flex flex-col gap-5"
         onSubmit={(event) => {
