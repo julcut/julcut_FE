@@ -97,7 +97,7 @@ export function BoothMapView({
     <Map
       center={center}
       isPanto={false}
-      level={4 + zoomStep}
+      level={2 + zoomStep}
       scrollwheel={false}
       className="absolute inset-0 isolate"
       // react-kakao-maps-sdk의 minLevel/maxLevel prop은 내부적으로 서로 뒤바뀐 채

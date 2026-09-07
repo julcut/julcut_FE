@@ -518,7 +518,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           <KakaoMap
             center={mapCenter}
             isPanto={false}
-            level={4 + zoomStep}
+            level={2 + zoomStep}
             scrollwheel={false}
             className="h-full w-full"
             onCreate={(map) => {
