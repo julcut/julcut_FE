@@ -67,7 +67,7 @@ export function SearchDialog({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-x-0 top-[118px] bottom-0 z-30 bg-dimmed" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-30 w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-8">
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-30 w-[480px] max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 sm:p-8">
           <div className="relative flex items-center justify-center">
             <Dialog.Title className="heading-small text-zinc-950">{title}</Dialog.Title>
             <Dialog.Close aria-label="닫기" className="absolute right-0 text-zinc-950">

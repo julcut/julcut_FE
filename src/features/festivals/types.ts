@@ -75,8 +75,8 @@ export interface CreateFestivalRequest {
   operationStartTime: string;
   /** HH:mm:ss */
   operationEndTime: string;
-  /** 결과보고서 생성을 위한 방문객 집계 방식 */
-  visitorCountInputMode: FestivalVisitorCountInputMode;
+  /** 생략하면 미설정 상태로 등록한다. */
+  visitorCountInputMode?: FestivalVisitorCountInputMode;
 }
 
 export interface CreateFestivalResponse {
@@ -100,26 +100,29 @@ export interface CreateFestivalWithMapResponse {
 export interface ManagedFestivalDetail {
   festivalId: string;
   seriesId: string;
-  festivalName: string;
-  description: string;
+  festivalName: string | null;
+  description: string | null;
   festivalYear: number;
   role: "FESTIVAL_OWNER" | "SUB_ADMIN";
   festivalStatus: "DRAFT" | "PUBLISHED" | "CANCELLED";
   progressStatus: "UPCOMING" | "ONGOING" | "COMPLETED";
-  address: string;
-  detailAddress: string;
-  startDate: string;
-  endDate: string;
-  operationStartTime: string;
-  operationEndTime: string;
+  address: string | null;
+  detailAddress: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  operationStartTime: string | null;
+  operationEndTime: string | null;
   visitorCountInputMode: "UNSET" | FestivalVisitorCountInputMode;
   locations: FestivalLocationResponse[];
 }
 
 export interface UpdateFestivalRequest extends Omit<
   CreateFestivalRequest,
-  "seriesId" | "visitorCountInputMode"
+  "seriesId" | "visitorCountInputMode" | "operationStartTime" | "operationEndTime"
 > {
+  /** 두 시간 모두 생략하면 기존 운영시간을 유지한다. */
+  operationStartTime?: string;
+  operationEndTime?: string;
   /** 생략하면 기존 방문객 집계 방식을 유지한다. */
   visitorCountInputMode?: FestivalVisitorCountInputMode;
 }
