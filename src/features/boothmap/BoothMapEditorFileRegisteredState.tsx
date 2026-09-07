@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from "react-kakao-maps-sdk";
@@ -34,9 +34,11 @@ import {
   nodeToLocalBooth,
   type LocalBoothPin,
 } from "./geometryWgs84";
+import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { primaryFestivalCenter } from "./mapCenter";
-import type { NodeType } from "./types";
+import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
+import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
 
 let cachedEmptyDragImage: HTMLImageElement | null = null;
@@ -120,7 +122,10 @@ const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
 
 /**
  * 카카오맵에서 부스 핀을 찍고 구역을 묶는 편집 화면.
- * 배치도 사진 업로드/OpenAI 분석은 1차 경로가 아니다.
+ *
+ * 배치도 이미지를 올리면 AI가 부스를 찾아 핀으로 뿌려주고(schema 2.0 위경도),
+ * 관리자는 그 핀을 끌어 보정한다. 분석이 도는 동안에는 백엔드가 저장을 거부하므로
+ * 편집·저장을 화면에서도 막는다.
  */
 export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: string }) {
   const router = useRouter();
@@ -163,7 +168,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [booths, setBooths] = useState<LocalBoothPin[]>([]);
   const [editRevision, setEditRevision] = useState(0);
   const [deletedNodeIds, setDeletedNodeIds] = useState<string[]>([]);
-  const [editorInitialized, setEditorInitialized] = useState(false);
+  // 로컬 상태를 서버 데이터로 다시 채워야 할 때 올리는 값. 지도가 바뀌거나 AI 분석이
+  // 끝나면 올라간다. 편집 중인 내용을 임의로 날리지 않도록 그 두 경우에만 올린다.
+  const [seedToken, setSeedToken] = useState(0);
+  const [seededKey, setSeededKey] = useState<string | null>(null);
+  const [analyzeDialogOpen, setAnalyzeDialogOpen] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [editingBoothId, setEditingBoothId] = useState<string | null>(null);
   const [zones, setZones] = useState<LocalZone[]>([]);
@@ -284,6 +293,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       );
       // 저장된 상태를 새 기준으로 삼는다(다음 렌더에서 현재 스냅샷으로 다시 채워진다).
       setSavedSnapshot(null);
+      // 저장 직후 화면 상태를 "저장된 상태"로 다시 기준 잡는다.
+      setSeedToken((token) => token + 1);
       toast.success("부스맵이 저장되었습니다.");
     },
     onError: async (error) => {
@@ -312,17 +323,59 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       if (!mapQuery.data?.mapId) throw new Error("지도 정보를 불러오지 못했습니다.");
       return replaceFestivalMap(festivalId, mapQuery.data.mapId, file);
     },
-    onSuccess: async () => {
+    onSuccess: async (summary) => {
+      // 지도가 통째로 교체됐으므로 편집기 쿼리 키에 쓰이는 mapId를 먼저 바꿔야 한다.
+      // 옛 mapId로 편집기를 다시 부르면 로드맵의 현재 지도와 어긋나 409가 난다.
+      queryClient.setQueryData(
+        ["coordinate-map", festivalId],
+        (previous: CreateCoordinateMapResponse | undefined) =>
+          previous ? { ...previous, mapId: summary.mapId } : previous,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["coordinate-map", festivalId] });
       await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
-      toast.success("파일을 재업로드했습니다.", {
-        description: "새 파일 분석이 시작됩니다.",
+      await queryClient.invalidateQueries({ queryKey: ["map-analysis", festivalId] });
+      toast.success("배치도를 올렸습니다.", {
+        description: "AI가 부스를 찾는 동안 편집과 저장은 잠시 막힙니다.",
       });
     },
-    onError: (error) => toast.error(getApiErrorMessage(error, "파일 재업로드에 실패했습니다.")),
+    onError: (error) => toast.error(getApiErrorMessage(error, "배치도 업로드에 실패했습니다.")),
   });
 
-  // 편집기 데이터가 처음 도착하면 로컬 상태를 한 번만 채운다(렌더 중 조정 — effect가 아니다).
-  if (editorQuery.data && !editorInitialized) {
+  // 분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
+  const handleAnalysisCompleted = useCallback(
+    async (status: MapAnalysisStatusResponse) => {
+      await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
+      setSeedToken((token) => token + 1);
+      if (status.acceptedCount > 0) {
+        toast.success(`부스 후보 ${status.acceptedCount}개를 찾았습니다.`, {
+          description:
+            status.rejectedCount > 0
+              ? `읽지 못한 ${status.rejectedCount}개는 제외했습니다. 위치와 이름을 확인해 주세요.`
+              : "위치와 이름을 확인한 뒤 저장해 주세요.",
+        });
+        return;
+      }
+      toast.info("배치도에서 부스를 찾지 못했습니다.", {
+        description: "핀 도구로 직접 찍거나, 더 선명한 배치도로 다시 시도해 주세요.",
+      });
+    },
+    [festivalId, queryClient],
+  );
+
+  const analysis = useMapAnalysis({
+    festivalId,
+    mapId: mapQuery.data?.mapId,
+    onCompleted: handleAnalysisCompleted,
+  });
+  // 분석 중에는 백엔드가 저장을 거부한다. 화면에서 막지 않으면 의미 없는 409만 돌아온다.
+  const editingLocked = analysis.isRunning || editorQuery.data?.roadmapStatus === "ANALYZING";
+  const hasBlueprintImage = !!editorQuery.data?.displayImageUrl;
+  const reviewRequiredCount = booths.filter((booth) => booth.uncertain).length;
+
+  // 편집기 데이터가 도착하면 로컬 상태를 채운다(렌더 중 조정 — effect가 아니다).
+  // 같은 지도·같은 seedToken에서는 한 번만 채워 사용자의 편집을 덮어쓰지 않는다.
+  const seedKey = editorQuery.data ? `${editorQuery.data.mapId}:${seedToken}` : null;
+  if (editorQuery.data && seedKey !== null && seedKey !== seededKey) {
     setBooths(
       editorQuery.data.nodes
         .map(nodeToLocalBooth)
@@ -336,7 +389,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         boothIds: zone.boothNodeIds.map((nodeId) => `node-${nodeId}`),
       })),
     );
-    setEditorInitialized(true);
+    setDeletedNodeIds([]);
+    setCheckedIds(new Set());
+    setEditingBoothId(null);
+    setSelectedZoneId(null);
+    setSeededKey(seedKey);
   }
 
   // 저장하지 않은 편집이 있는지. 브라우저 뒤로가기·탭 닫기로 작업이 사라지는 것을 막는 데 쓴다.
@@ -344,11 +401,13 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     () => JSON.stringify({ booths, zones, deletedNodeIds }),
     [booths, zones, deletedNodeIds],
   );
-  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
-  if (editorInitialized && savedSnapshot === null) {
-    setSavedSnapshot(currentSnapshot);
+  // 서버 데이터를 새로 채울 때마다(지도 교체·AI 분석 완료) 기준 스냅샷도 다시 잡는다.
+  // 그러지 않으면 AI가 뿌린 부스가 곧바로 "저장하지 않은 편집"으로 잡힌다.
+  const [savedSnapshot, setSavedSnapshot] = useState<{ key: string; value: string } | null>(null);
+  if (seededKey !== null && savedSnapshot?.key !== seededKey) {
+    setSavedSnapshot({ key: seededKey, value: currentSnapshot });
   }
-  const hasUnsavedChanges = savedSnapshot !== null && savedSnapshot !== currentSnapshot;
+  const hasUnsavedChanges = savedSnapshot !== null && savedSnapshot.value !== currentSnapshot;
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -484,6 +543,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             <RadiobuttonIcon />
           </span>
           <span className="body-regular truncate text-left text-zinc-950">{booth.name}</span>
+          {booth.uncertain ? (
+            <span className="body-caption shrink-0 rounded-full bg-secondary-600/10 px-1.5 text-secondary-600">
+              검수
+            </span>
+          ) : null}
         </button>
         <span
           onMouseDown={() => setDraggableRowId(booth.id)}
@@ -575,7 +639,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               map.setMaxLevel(8);
             }}
             onClick={(_target, mouseEvent) => {
-              if (drawTool !== "pin") return;
+              if (drawTool !== "pin" || editingLocked) return;
               const latLng = mouseEvent.latLng;
               if (!latLng) return;
               addBoothAt(latLng.getLat(), latLng.getLng());
@@ -800,6 +864,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       )}
 
+      <MapAnalysisProgressCard
+        analysis={analysis}
+        className="absolute top-28 left-1/2 z-20 -translate-x-1/2 lg:top-10"
+      />
+
       <Button
         variant="outline"
         className="absolute top-28 left-4 lg:hidden"
@@ -817,15 +886,30 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         <MapSidePanel className="h-full w-full">
           <p className="body-large-bold text-zinc-950">
             축제부스 <span className="text-primary">{booths.length}</span>
+            {reviewRequiredCount > 0 ? (
+              <span className="body-small ml-2 text-secondary-600">
+                검수 필요 {reviewRequiredCount}
+              </span>
+            ) : null}
           </p>
           <div className="flex flex-col gap-2 rounded-md bg-zinc-100 px-4 py-3 text-left">
             <p className="body-small-bold text-zinc-950">
-              {booths.length === 0 ? "아직 찍은 부스가 없습니다." : "지도에서 부스를 편집하세요."}
+              {editingLocked
+                ? "AI가 배치도를 읽고 있습니다."
+                : booths.length === 0
+                  ? "아직 찍은 부스가 없습니다."
+                  : reviewRequiredCount > 0
+                    ? "AI가 찾은 부스를 확인해 주세요."
+                    : "지도에서 부스를 편집하세요."}
             </p>
             <p className="body-caption text-zinc-950">
-              {booths.length === 0
-                ? "오른쪽 핀 도구를 켠 뒤 지도를 클릭해 부스를 추가하세요."
-                : "핀을 선택해 이름을 바꾸고, 여러 개를 골라 구역으로 묶을 수 있습니다."}
+              {editingLocked
+                ? "분석이 끝나면 찾은 부스가 지도에 표시됩니다. 그때까지 편집과 저장은 막힙니다."
+                : booths.length === 0
+                  ? "오른쪽 핀 도구를 켜 지도를 클릭하거나, 배치도 이미지를 올려 AI 분석을 돌리세요."
+                  : reviewRequiredCount > 0
+                    ? "주황색 핀은 AI가 찾은 위치라 정확하지 않을 수 있습니다. 끌어서 옮기고 이름을 확인해 주세요."
+                    : "핀을 선택해 이름을 바꾸고, 여러 개를 골라 구역으로 묶을 수 있습니다."}
             </p>
           </div>
 
@@ -902,15 +986,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             type="button"
             variant="outline"
             icon={<FileIcon />}
-            disabled={replaceMutation.isPending}
-            onClick={() => replaceFileInputRef.current?.click()}
+            disabled={replaceMutation.isPending || editingLocked}
+            onClick={() => setAnalyzeDialogOpen(true)}
           >
-            {replaceMutation.isPending ? "재업로드 중..." : "파일 재업로드"}
+            {replaceMutation.isPending
+              ? "배치도 올리는 중..."
+              : hasBlueprintImage
+                ? "다른 배치도로 다시 분석"
+                : "배치도 이미지로 AI 분석"}
           </Button>
           <Button
             type="button"
             variant="primary"
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || editingLocked}
+            title={editingLocked ? "AI 분석이 끝난 뒤에 저장할 수 있습니다." : undefined}
             onClick={() => setSaveDialogOpen(true)}
           >
             {saveMutation.isPending ? "저장 중..." : "저장하기"}
@@ -930,6 +1019,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             icon={<RadiobuttonIcon className="size-5" />}
             aria-label="핀 추가"
             aria-pressed={drawTool === "pin"}
+            disabled={editingLocked}
             className={cn("text-zinc-950", drawTool === "pin" && "ring-2 ring-primary")}
             onClick={() => setPinTypeMenuOpen((open) => !open)}
           />
@@ -991,6 +1081,22 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         onConfirm={() => {
           setSaveDialogOpen(false);
           saveMutation.mutate();
+        }}
+      />
+      <ConfirmDialog
+        open={analyzeDialogOpen}
+        onOpenChange={setAnalyzeDialogOpen}
+        title="배치도 이미지로 AI 분석을 시작할까요?"
+        description={
+          booths.length > 0
+            ? `지도를 새로 만들기 때문에 지금 찍혀 있는 핀 ${booths.length}개가 사라집니다. 저장하지 않은 편집도 함께 사라집니다.`
+            : "AI가 배치도에서 부스를 찾아 핀으로 뿌려 줍니다. 분석이 끝날 때까지 편집과 저장은 막힙니다."
+        }
+        confirmLabel="이미지 선택"
+        confirmVariant="primary"
+        onConfirm={() => {
+          setAnalyzeDialogOpen(false);
+          replaceFileInputRef.current?.click();
         }}
       />
       <ConfirmDialog
