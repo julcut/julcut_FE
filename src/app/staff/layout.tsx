@@ -9,7 +9,8 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
       <OfflineBanner />
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       {/* 모바일 화면이라 콘솔(top-right)과 달리 상단 중앙에 띄운다. */}
-      <Toaster position="top-center" />
+      {/* 스태프 화면은 상단 요약바가 얇아 헤더 아래로만 살짝 내린다. */}
+      <Toaster position="top-center" offset={{ top: "76px" }} mobileOffset={{ top: "68px" }} />
     </div>
   );
 }

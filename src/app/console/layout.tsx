@@ -75,7 +75,15 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           </div>
         </div>
       </div>
-      <Toaster position="top-right" />
+      {/*
+        알림은 맥 알림처럼 상단바 바로 아래 오른쪽 위에 뜬다. 기본값으로 두면
+        상단바에 걸쳐 가리므로, HeaderNav가 알려 주는 --console-topbar-height만큼 내린다.
+      */}
+      <Toaster
+        position="top-right"
+        offset={{ top: "calc(var(--console-topbar-height, 72px) + 16px)", right: "32px" }}
+        mobileOffset={{ top: "calc(var(--console-topbar-height, 72px) + 12px)", right: "16px" }}
+      />
     </AdminAuthGuard>
   );
 }

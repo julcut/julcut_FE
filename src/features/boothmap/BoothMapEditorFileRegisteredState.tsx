@@ -231,6 +231,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [pinTypeMenuOpen, setPinTypeMenuOpen] = useState(false);
   const [mapLoading, mapError] = useKakaoMapLoader();
   const mapWrapperRef = useRef<HTMLDivElement>(null);
+  const boothListRef = useRef<HTMLDivElement>(null);
+  const mapToolsRef = useRef<HTMLDivElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const overlayFileInputRef = useRef<HTMLInputElement>(null);
   const localImageFiles = useRef(new Map<string, File>());
@@ -385,10 +387,38 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     [selectedZone, booths],
   );
 
+  const selectedLatitude = selectedBooth?.lat;
+  const selectedLongitude = selectedBooth?.lng;
   useEffect(() => {
-    if (!selectedBooth || !kakaoMapRef.current || !window.kakao?.maps) return;
-    kakaoMapRef.current.panTo(new window.kakao.maps.LatLng(selectedBooth.lat, selectedBooth.lng));
-  }, [selectedBooth]);
+    const wrapper = mapWrapperRef.current;
+    if (selectedLatitude == null || selectedLongitude == null || !kakaoMap || !wrapper) return;
+
+    function centerSelectedBooth() {
+      if (!wrapper || !kakaoMap) return;
+      const bounds = wrapper.getBoundingClientRect();
+      const list = boothListRef.current?.getBoundingClientRect();
+      const tools = mapToolsRef.current?.getBoundingClientRect();
+      // 메뉴가 덮고 있는 부분을 제외한 지도 영역의 가운데에 선택한 핀을 둔다.
+      const left = list?.width ? Math.max(0, list.right - bounds.left) : 0;
+      const right = tools?.width ? Math.min(bounds.width, tools.left - bounds.left) : bounds.width;
+      const targetX = (left + right) / 2;
+      const projection = kakaoMap.getProjection();
+      const point = projection.containerPointFromCoords(
+        new window.kakao.maps.LatLng(selectedLatitude!, selectedLongitude!),
+      );
+      kakaoMap.panTo(
+        projection.coordsFromContainerPoint(
+          new window.kakao.maps.Point(point.x + bounds.width / 2 - targetX, point.y),
+        ),
+      );
+    }
+
+    centerSelectedBooth();
+    const observer = new ResizeObserver(centerSelectedBooth);
+    observer.observe(wrapper);
+    if (boothListRef.current) observer.observe(boothListRef.current);
+    return () => observer.disconnect();
+  }, [selectedId, selectedLatitude, selectedLongitude, kakaoMap, boothListOpen]);
 
   // 서버 데이터를 새로 받을 때마다(최초 진입, AI 분석 완료 등) 부스 전체가 보이도록
   // 한 번 맞춘다. 그 뒤로는 사용자가 옮기고 확대한 위치를 존중한다.
@@ -535,26 +565,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     onError: (error) => toast.error(getApiErrorMessage(error, "배치도 업로드에 실패했습니다.")),
   });
 
-  // 분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
-  const handleAnalysisCompleted = useCallback(
-    async (status: MapAnalysisStatusResponse) => {
-      await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
-      setSeedToken((token) => token + 1);
-      if (status.acceptedCount > 0) {
-        toast.success(`부스 후보 ${status.acceptedCount}개를 찾았습니다.`, {
-          description:
-            status.rejectedCount > 0
-              ? `읽지 못한 ${status.rejectedCount}개는 제외했습니다. 위치와 이름을 확인해 주세요.`
-              : "위치와 이름을 확인한 뒤 저장해 주세요.",
-        });
-        return;
-      }
-      toast.info("배치도에서 부스를 찾지 못했습니다.", {
-        description: "핀 도구로 직접 찍거나, 더 선명한 배치도로 다시 시도해 주세요.",
-      });
-    },
-    [festivalId, queryClient],
-  );
+  /*
+    분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
+    결과 문구는 지도 위 분석 안내 카드가 이미 같은 내용으로 보여 주므로 토스트를
+    따로 띄우지 않는다 — 같은 말이 두 번 떠서 화면만 가렸다.
+  */
+  const handleAnalysisCompleted = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
+    setSeedToken((token) => token + 1);
+  }, [festivalId, queryClient]);
 
   const analysis = useMapAnalysis({
     festivalId,
@@ -1409,6 +1428,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
             setCheckedIds(new Set([booth.id]));
             setEditingBoothId(booth.id);
+            setBoothListOpen(false);
           }}
           className="flex min-w-0 flex-1 items-center gap-1"
         >
@@ -1763,6 +1783,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
                       setCheckedIds(new Set([booth.id]));
                       setEditingBoothId(booth.id);
+                      setBoothListOpen(false);
                     }}
                     /*
                       아이콘을 넣으면서 히트 영역을 넉넉히 잡는다(28px). 점(12px)만 할 때는
@@ -2006,6 +2027,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         {boothListOpen ? "부스 목록 닫기" : "부스 목록"}
       </Button>
       <div
+        ref={boothListRef}
         className={cn(
           "absolute top-44 bottom-4 left-4 w-[calc(100%-80px)] lg:top-10 lg:bottom-10 lg:left-8 lg:block lg:w-72",
           !boothListOpen && "hidden",
@@ -2214,7 +2236,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         />
       </div>
 
-      <div className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10">
+      <div
+        ref={mapToolsRef}
+        className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10"
+      >
         <div className="flex flex-col gap-1">
           <IconButton
             icon={<RadiobuttonIcon className="size-5" />}
