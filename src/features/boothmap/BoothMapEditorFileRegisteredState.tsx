@@ -31,6 +31,7 @@ import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/httpError";
 import { useConsoleUiStore } from "@/store/consoleUiStore";
 import { cn } from "@/lib/utils";
 import {
+  approveBooths,
   ensureCoordinateMap,
   getMapEditor,
   replaceFestivalMap,
@@ -559,6 +560,23 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     onSuccess: async (response) => {
       setEditRevision(response.editRevision);
       setDeletedNodeIds([]);
+      /*
+        지도만 저장하면 노드는 생겨도 운영 부스가 없어 대시보드가 «부스 0개»로 보인다.
+        저장한 부스를 곧바로 운영 부스로 승인해 혼잡도·대기열·리포트까지 이어지게 한다.
+        승인이 실패해도 지도 저장 자체는 이미 끝났으므로 그 사실만 알리고 진행한다.
+      */
+      let approvedCount = 0;
+      try {
+        const approved = await approveBooths(festivalId, mapQuery.data!.mapId);
+        approvedCount = approved.approvedCount;
+        if (approvedCount > 0) {
+          await queryClient.invalidateQueries({ queryKey: ["festival-dashboard", festivalId] });
+        }
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, "부스를 운영 목록에 등록하지 못했습니다."), {
+          description: "지도는 저장됐습니다. 잠시 후 다시 저장해 주세요.",
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
       const editor = await getMapEditor(festivalId, mapQuery.data!.mapId);
       applyPartitionedNodes(editor.nodes, setBooths, setShapes, setPreservedNodes);
@@ -579,7 +597,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       setSavedSnapshot(null);
       // 저장 직후 화면 상태를 "저장된 상태"로 다시 기준 잡는다.
       setSeedToken((token) => token + 1);
-      toast.success("부스맵과 표시 설정이 저장되었습니다.");
+      toast.success("부스맵과 표시 설정이 저장되었습니다.", {
+        description:
+          approvedCount > 0 ? `부스 ${approvedCount}개를 운영 목록에 등록했습니다.` : undefined,
+      });
     },
     onError: async (error) => {
       if (getApiErrorCode(error) === 40910) {
