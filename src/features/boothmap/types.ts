@@ -237,3 +237,9 @@ export interface BoothMapQueueLine {
 }
 
 export type BoothMapObject = BoothMapShape | BoothMapQueueLine;
+
+/** 지도 부스 노드 일괄 승인 응답. 이번에 새로 승인된 부스만 담긴다. */
+export interface ApproveBoothsResponse {
+  approvedCount: number;
+  booths: { boothId: number; nodeId: string; boothName: string }[];
+}

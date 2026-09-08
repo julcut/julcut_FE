@@ -9,6 +9,7 @@ import type {
   MapAnalysisStatusResponse,
   MapEditorResponse,
   SaveRoadmapDraftRequest,
+  ApproveBoothsResponse,
   SaveRoadmapDraftResponse,
 } from "./types";
 
@@ -117,4 +118,20 @@ export async function replaceFestivalMap(
 
 export async function deleteFestivalMap(festivalId: string, mapId: string): Promise<void> {
   await adminApiClient.delete<ApiResponse<void>>(`/festivals/${festivalId}/maps/${mapId}`);
+}
+
+/**
+ * 지도에 찍은 부스 노드를 한 번에 운영 부스로 승인한다.
+ *
+ * 지도만 저장하면 노드는 생기지만 운영 부스(booth_info)가 없어 대시보드가 «부스 0개»로
+ * 보인다. 이미 승인된 노드와 부스가 아닌 노드는 서버가 조용히 건너뛴다.
+ */
+export async function approveBooths(
+  festivalId: string,
+  mapId: string,
+): Promise<ApproveBoothsResponse> {
+  const { data } = await adminApiClient.post<ApiResponse<ApproveBoothsResponse>>(
+    `/festivals/${festivalId}/maps/${mapId}/approve-booths`,
+  );
+  return data.data;
 }
