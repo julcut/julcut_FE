@@ -1853,9 +1853,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                   style={{ position: "static" }}
                   initialName={selectedShape.name}
                   typeLabel={SHAPE_LABEL[selectedShape.kind]}
-                  hint="이름을 고치거나, 지도의 꼭짓점을 끌어 모양을 바꿀 수 있습니다. Alt를 누른 채 꼭짓점을 누르면 지웁니다."
                   onChangeNodeType={(nodeType) => changeShapeNodeType(selectedShape, nodeType)}
-                  showParentZone={false}
                   confirmLabel={selectedShape.isNew ? "등록" : "수정"}
                   hideCancel
                   onConfirm={(name) => {
