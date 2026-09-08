@@ -65,6 +65,13 @@ async function mockDashboard(
       };
     } else if (path.endsWith("/operations/congestion")) {
       data = { booths: [] };
+    } else if (path.endsWith("/operations/map")) {
+      data = {
+        mapId: "test-map",
+        editRevision: 0,
+        mapKind: "COORDINATE",
+        booths: [],
+      };
     } else if (path.endsWith("/operations/queues")) {
       data = { queues: [] };
     } else if (path.endsWith("/operations/suggestions")) {
@@ -160,8 +167,13 @@ test("진행예정 축제의 대시보드는 실시간 지표 대신 준비 현�
   await expect(page.getByText("개막까지", { exact: true })).toBeVisible();
   await expect(page.getByText("활성 대기열", { exact: true })).toHaveCount(0);
   await expect(page.getByText("현재 방문자수", { exact: true })).toHaveCount(0);
-  // 시작하지 않은 축제에 실시간 조회를 걸지 않는다.
-  expect(requests.filter((request) => request.includes("/operations/"))).toEqual([]);
+  /*
+    시작하지 않은 축제에 실시간 조회를 걸지 않는다. 운영 지도(`/operations/map`)는
+    부지 경계·팜플렛을 그리는 읽기 전용 조회라 개막 전에도 부른다 — 실시간 지표가 아니다.
+  */
+  expect(
+    requests.filter((request) => /\/operations\/(congestion|queues|suggestions)/.test(request)),
+  ).toEqual([]);
 });
 
 test("종료된 축제의 대시보드는 부스맵 수정을 막고 결과리포트로 안내한다", async ({ page }) => {
