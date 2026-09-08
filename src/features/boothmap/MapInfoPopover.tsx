@@ -70,6 +70,8 @@ export function MapInfoPopover({
   hideCancel = false,
   typeLabel,
   parentZoneName = "-",
+  showParentZone = true,
+  hint,
 }: {
   mode: MapInfoPopoverMode;
   initialName: string;
@@ -91,6 +93,10 @@ export function MapInfoPopover({
   typeLabel?: string;
   /** 그룹 내 시설이면 소속 상위 구역명을 표시한다. */
   parentZoneName?: string;
+  /** 상위구역 행을 감춘다. 도형처럼 구역에 속하지 않는 대상에 쓴다. */
+  showParentZone?: boolean;
+  /** 유형 아래에 덧붙일 한 줄 안내. 무엇을 고칠 수 있는지 알려 준다. */
+  hint?: string;
 }) {
   const [name, setName] = useState(initialName);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -227,10 +233,13 @@ export function MapInfoPopover({
               ) : null}
             </div>
           ) : null}
-          <div className="flex items-center justify-between">
-            <span className="body-small text-zinc-500">상위구역</span>
-            <span className="body-small text-zinc-950">{parentZoneName}</span>
-          </div>
+          {hint ? <p className="body-caption text-zinc-500">{hint}</p> : null}
+          {showParentZone ? (
+            <div className="flex items-center justify-between">
+              <span className="body-small text-zinc-500">상위구역</span>
+              <span className="body-small text-zinc-950">{parentZoneName}</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 flex items-center gap-2">
