@@ -153,7 +153,11 @@ function applyPartitionedNodes(
   }
 }
 
-const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
+/*
+  말풍선은 고른 대상 위에 뜬다. yAnchor를 정확히 1로 두면 말풍선 꼬리가 핀에 닿아
+  핀을 가린다. 높이의 12%만큼 더 올려 핀이 보이게 띄운다.
+*/
+const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1.12 } as const;
 
 /** 지도에서 고를 수 있는 그리기 도구. 핀·폴리곤·라인은 노드, 경계·대기줄은 표시 설정이다. */
 type DrawTool = "select" | "pin" | "polygon" | "line" | "boundary" | "queue-line";
@@ -167,6 +171,17 @@ const SHAPE_LABEL: Record<"polygon" | "line", string> = {
   polygon: "구역",
   line: "통로",
 };
+
+/** 지도 클릭 두 번이 사실상 같은 자리인지. 서버는 이어진 중복 점을 거절한다. */
+function isSamePlace(a: LatLng | undefined, b: LatLng, tolerance = 0.000015) {
+  if (!a) return false;
+  return Math.abs(a.lat - b.lat) < tolerance && Math.abs(a.lng - b.lng) < tolerance;
+}
+
+/** 첫 꼭짓점 근처를 다시 눌렀고 최소 점수를 채웠는지. 도형을 닫는 신호로 쓴다. */
+function closesDraft(points: LatLng[], point: LatLng, minimum: number, tolerance = 0.00005) {
+  return points.length >= minimum && isSamePlace(points[0], point, tolerance);
+}
 
 /** 노드 유형이 어떤 대분류에 속하는지. 설계서 "5. 유형 변경하기"의 핀·폴리곤·라인이다. */
 function categoryOfNodeType(nodeType: NodeType): "pin" | "polygon" | "line" {
@@ -240,6 +255,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [removePamphletOpen, setRemovePamphletOpen] = useState(false);
+  const [clearQueuePathOpen, setClearQueuePathOpen] = useState(false);
   /*
     분석 안내를 닫아 둔 작업 키. 새 분석이 시작되거나 상태가 바뀌면 다시 띄운다 —
     한 번 닫았다고 다음 결과까지 숨기면 무엇이 끝났는지 알 수 없다.
@@ -919,7 +935,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     return map;
   }, [booths, dashboardQuery.data?.booths]);
   const queueByBoothId = useMemo(() => {
-    const map = new Map<string, { queueId: string; path: LatLng[] | null }>();
+    const map = new Map<
+      string,
+      {
+        queueId: string;
+        path: LatLng[] | null;
+        tailLatitude: number | null;
+        tailLongitude: number | null;
+      }
+    >();
     (queuesQuery.data?.queues ?? []).forEach((queue) => map.set(String(queue.boothId), queue));
     return map;
   }, [queuesQuery.data?.queues]);
@@ -965,6 +989,22 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const queueSaveMutation = useMutation({
     mutationFn: async (path: LatLng[]) => {
       if (!queueDraftId) throw new Error("승인된 부스 대기열이 없습니다.");
+      /*
+        빈 배열은 "경로 삭제"다(백엔드 BE-05: null=유지, []=삭제, 1점 거절).
+        줄끝 좌표는 대기시간 계산에 쓰이므로 지우지 않고 지금 값을 그대로 다시 보낸다.
+      */
+      if (path.length === 0) {
+        const tailLatitude = selectedQueue?.tailLatitude;
+        const tailLongitude = selectedQueue?.tailLongitude;
+        if (tailLatitude == null || tailLongitude == null) {
+          throw new Error("줄끝 위치가 없어 경로만 지울 수 없습니다.");
+        }
+        return updateQueueTail(festivalId, queueDraftId, {
+          tailLatitude,
+          tailLongitude,
+          path: [],
+        });
+      }
       if (path.length < 2 || path.length > 500)
         throw new Error("대기줄은 2~500개의 점이 필요합니다.");
       const tail = path[path.length - 1];
@@ -1546,23 +1586,51 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               if (editingLocked || panOverride) return;
               const latLng = mouseEvent.latLng;
               if (!latLng) return;
+              const point = { lat: latLng.getLat(), lng: latLng.getLng() };
               if (drawTool === "pin") {
-                addBoothAt(latLng.getLat(), latLng.getLng());
+                addBoothAt(point.lat, point.lng);
                 return;
               }
               if (drawTool === "polygon" || drawTool === "line") {
-                addDraftPoint(latLng.getLat(), latLng.getLng());
+                // 첫 꼭짓점을 다시 누르면 도형을 닫는다(더블클릭의 첫 번째 클릭도 여기서 걸린다).
+                if (closesDraft(draftPoints, point, SHAPE_MINIMUM_POINTS[drawTool])) {
+                  finishDraftShape();
+                  return;
+                }
+                if (isSamePlace(draftPoints[draftPoints.length - 1], point)) return;
+                addDraftPoint(point.lat, point.lng);
                 return;
               }
               if (drawTool === "boundary") {
-                setBoundaryDraft((prev) => [
-                  ...prev,
-                  { lat: latLng.getLat(), lng: latLng.getLng() },
-                ]);
+                if (closesDraft(boundaryDraft, point, 3)) {
+                  finishBoundary();
+                  return;
+                }
+                if (isSamePlace(boundaryDraft[boundaryDraft.length - 1], point)) return;
+                setBoundaryDraft((prev) => [...prev, point]);
                 return;
               }
               if (drawTool === "queue-line" && queueDraftId) {
-                setQueueDraft((prev) => [...prev, { lat: latLng.getLat(), lng: latLng.getLng() }]);
+                if (isSamePlace(queueDraft[queueDraft.length - 1], point)) return;
+                setQueueDraft((prev) => [...prev, point]);
+              }
+            }}
+            /*
+              화면설계서 FE-05: Enter 또는 첫 꼭짓점 근처 더블클릭으로 그리기를 끝낸다.
+              더블클릭은 클릭 두 번이 먼저 오므로, 같은 자리 중복 점은 위에서 걸러 둔다.
+            */
+            onDoubleClick={() => {
+              if (editingLocked || panOverride) return;
+              if (drawTool === "polygon" || drawTool === "line") {
+                finishDraftShape();
+                return;
+              }
+              if (drawTool === "boundary") {
+                finishBoundary();
+                return;
+              }
+              if (drawTool === "queue-line" && queueDraft.length >= 2) {
+                queueSaveMutation.mutate(queueDraft);
               }
             }}
           >
@@ -2388,6 +2456,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           >
             {queueSaveMutation.isPending ? "저장 중..." : "대기줄 저장"}
           </Button>
+          {/* 이미 저장된 경로가 있을 때만. 서버에는 빈 배열이 곧 삭제다. */}
+          {selectedQueue?.path && selectedQueue.path.length > 0 ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={queueSaveMutation.isPending}
+              onClick={() => setClearQueuePathOpen(true)}
+            >
+              경로 지우기
+            </Button>
+          ) : null}
           {queueSaveError ? <p className="body-caption text-error">{queueSaveError}</p> : null}
         </div>
       ) : null}
@@ -2475,6 +2554,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       ) : null}
 
+      <ConfirmDialog
+        open={clearQueuePathOpen}
+        onOpenChange={setClearQueuePathOpen}
+        title="대기줄 경로를 지우시겠습니까?"
+        description="지도에서 줄이 사라집니다. 줄끝 위치와 대기시간은 그대로 남습니다."
+        cancelLabel="취소"
+        confirmLabel="지우기"
+        confirmVariant="destructive"
+        confirmPending={queueSaveMutation.isPending}
+        onConfirm={() => {
+          setClearQueuePathOpen(false);
+          queueSaveMutation.mutate([]);
+        }}
+      />
       <ConfirmDialog
         open={removePamphletOpen}
         onOpenChange={setRemovePamphletOpen}
