@@ -104,6 +104,17 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     const queueByBoothId = new Map(
       (queuesQuery.data?.queues ?? []).map((queue) => [queue.boothId, queue]),
     );
+    /*
+      부스와 지도 노드를 잇는 값이 두 갈래다. 대시보드 응답은 부스에 달린
+      roadmapNodePublicId를, 편집기는 노드에 달린 relatedBoothId를 쓴다. 노드 쪽에만
+      연결이 있는 부스는 roadmapNodePublicId가 비어 구역을 못 찾고 "구역 미지정"으로
+      떨어졌다. 운영 지도가 내려주는 boothId↔nodeId 쌍으로 그 빈칸을 메운다.
+    */
+    const nodeIdByBoothId = new Map(
+      (operationsMapQuery.data?.booths ?? [])
+        .filter((booth) => booth.nodeId)
+        .map((booth) => [booth.boothId, booth.nodeId as string]),
+    );
     return dashboardBooths.map((dashboardBooth) => {
       const congestion = congestionByBoothId.get(dashboardBooth.boothId);
       const queue = queueByBoothId.get(dashboardBooth.boothId);
@@ -111,7 +122,10 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
         boothId: String(dashboardBooth.boothId),
         queueId: queue?.queueId,
         name: dashboardBooth.boothName,
-        zoneId: zoneIdByNodeId.get(dashboardBooth.roadmapNodePublicId ?? "") ?? "unassigned",
+        zoneId:
+          zoneIdByNodeId.get(
+            dashboardBooth.roadmapNodePublicId ?? nodeIdByBoothId.get(dashboardBooth.boothId) ?? "",
+          ) ?? "unassigned",
         lat: dashboardBooth.lat ?? undefined,
         lng: dashboardBooth.lng ?? undefined,
         congestionLevel:
@@ -129,6 +143,7 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     congestionQuery.data?.booths,
     dashboardQuery.data?.booths,
     dashboardQuery.data?.zones,
+    operationsMapQuery.data?.booths,
     queuesQuery.data?.queues,
   ]);
   const mapZones = useMemo((): BoothZone[] => {
