@@ -25,9 +25,11 @@ import type {
   FestivalVisitorCountInputMode,
 } from "@/features/festivals/types";
 import { getApiErrorMessage } from "@/lib/api/httpError";
+import { geocodeAddress } from "@/lib/kakaoGeocoder";
 import {
   createInitialLocationDrafts,
   createLocationDraft,
+  hasLocationDraftCoordinate,
   isLocationDraftComplete,
   toFestivalLocationRequests,
   type LocationDraft,
@@ -41,6 +43,9 @@ const MAP_IMAGE_ACCEPT = "image/png,image/jpeg";
 const MAP_IMAGE_MIME_TYPES = ["image/png", "image/jpeg"];
 /** application.yml의 app.map.image.max-file-size 기본값과 맞춘다. */
 const MAP_IMAGE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** 주소를 좌표로 바꾸지 못했을 때 공통으로 쓰는 안내. */
+const ADDRESS_GEOCODE_FAILED_MESSAGE = "주소를 찾지 못했습니다. 주소 검색으로 다시 선택해 주세요.";
 
 export function FestivalRegisterForm() {
   const router = useRouter();
@@ -70,8 +75,19 @@ export function FestivalRegisterForm() {
   const [addressSearchTargetKey, setAddressSearchTargetKey] = useState<string | null>(null);
   const [addressSearchState, setAddressSearchState] = useState<SearchDialogState>("default");
   const [addressSearchResults, setAddressSearchResults] = useState<SearchDialogResult[]>([]);
+  const [addressManualPending, setAddressManualPending] = useState(false);
+  const [addressManualError, setAddressManualError] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
+  const [geocodePending, setGeocodePending] = useState(false);
+  /** 등록 직전 지오코딩까지 해봐도 좌표를 못 구한 장소 key — 해당 주소 칸에만 사유를 띄운다. */
+  const [addressErrorKeys, setAddressErrorKeys] = useState<string[]>([]);
+  /*
+    등록 확인 다이얼로그를 띄우기 직전에 좌표까지 채운 장소 목록. 확인 버튼이
+    누르는 시점의 `locations` 상태를 다시 읽지 않고 이 값을 그대로 보내서,
+    검증을 통과한 목록과 실제로 전송되는 목록이 어긋나지 않게 한다.
+  */
+  const [submitLocations, setSubmitLocations] = useState<LocationDraft[]>([]);
 
   useKakaoMapLoader();
 
@@ -86,9 +102,15 @@ export function FestivalRegisterForm() {
     }
   }
 
-  function applyFestivalSeries(series: FestivalSeriesSearchResult) {
+  async function applyFestivalSeries(series: FestivalSeriesSearchResult) {
     setName(series.name);
     setDescription(series.latestDescription);
+    setStartDate(toDisplayDate(series.latestStartDate));
+    setEndDate(toDisplayDate(series.latestEndDate));
+    setFestivalSearchOpen(false);
+
+    // 시리즈 검색 결과에는 주소만 있고 좌표가 없다. 주소를 채우면서 좌표도 같이 만들어 둔다.
+    const firstKey = locations[0]?.key;
     setLocations((current) => {
       const [first, ...rest] = current;
       return [
@@ -96,13 +118,16 @@ export function FestivalRegisterForm() {
           ...first,
           roadAddress: series.latestAddress,
           detailAddress: series.latestDetailAddress,
+          latitude: undefined,
+          longitude: undefined,
         },
         ...rest,
       ];
     });
-    setStartDate(toDisplayDate(series.latestStartDate));
-    setEndDate(toDisplayDate(series.latestEndDate));
-    setFestivalSearchOpen(false);
+
+    const coordinate = await geocodeAddress(series.latestAddress);
+    // 여기서 실패해도 막지 않는다. 등록 직전 검증이 다시 시도하고, 그때도 못 찾으면 안내한다.
+    if (coordinate && firstKey) updateLocation(firstKey, coordinate);
   }
 
   function searchAddress(keyword: string) {
@@ -128,6 +153,8 @@ export function FestivalRegisterForm() {
 
   function updateLocation(key: string, patch: Partial<Omit<LocationDraft, "key">>) {
     setLocations((current) => current.map((loc) => (loc.key === key ? { ...loc, ...patch } : loc)));
+    // 좌표가 채워졌으면 이 장소에 걸린 "주소를 못 찾음" 표시를 걷는다.
+    if (patch.latitude != null) setAddressErrorKeys((current) => current.filter((k) => k !== key));
   }
 
   function addLocation() {
@@ -147,11 +174,11 @@ export function FestivalRegisterForm() {
   }
 
   const createMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (locationsToSubmit: LocationDraft[]) => {
       const request = {
         name,
         description,
-        locations: toFestivalLocationRequests(locations, primaryKey),
+        locations: toFestivalLocationRequests(locationsToSubmit, primaryKey),
         startDate: toIsoDate(startDate),
         endDate: toIsoDate(endDate),
         // 운영 시작/종료 시간은 이번 화면 디자인에 없어 임시 기본값을 보낸다.
@@ -198,7 +225,7 @@ export function FestivalRegisterForm() {
     setMapImageError(null);
   }
 
-  function handleSubmitClick() {
+  async function handleSubmitClick() {
     if (name.trim().length === 0) {
       setFormError("축제명을 입력해 주세요.");
       return;
@@ -219,7 +246,39 @@ export function FestivalRegisterForm() {
       setFormError("모든 장소에 이름과 주소를 입력해 주세요.");
       return;
     }
+
+    /*
+      좌표가 빈 장소를 주소로 지오코딩해서 채운다. 주소 검색으로 고른 주소는 이미
+      좌표가 있지만, 직접 입력하거나 이전 축제에서 불러온 주소는 비어 있을 수 있다.
+      좌표 없이 보내면 백엔드가 이유 없는 400으로 막고 부스맵도 못 만들기 때문에,
+      여기서 채우지 못한 장소가 있으면 저장을 진행하지 않고 이유를 알려 준다.
+    */
     setFormError(null);
+    setAddressErrorKeys([]);
+    setGeocodePending(true);
+    let resolved: LocationDraft[];
+    try {
+      resolved = await Promise.all(
+        locations.map(async (location) => {
+          if (hasLocationDraftCoordinate(location)) return location;
+          const coordinate = await geocodeAddress(location.roadAddress);
+          return coordinate ? { ...location, ...coordinate } : location;
+        }),
+      );
+    } finally {
+      setGeocodePending(false);
+    }
+    setLocations(resolved);
+
+    const unresolved = resolved.filter((location) => !hasLocationDraftCoordinate(location));
+    if (unresolved.length > 0) {
+      const names = unresolved.map((location) => location.locationName.trim() || "이름 없는 장소");
+      setAddressErrorKeys(unresolved.map((location) => location.key));
+      setFormError(`${names.join(", ")}의 ${ADDRESS_GEOCODE_FAILED_MESSAGE}`);
+      return;
+    }
+
+    setSubmitLocations(resolved);
     setSubmitDialogOpen(true);
   }
 
@@ -269,10 +328,34 @@ export function FestivalRegisterForm() {
                 ) : null}
 
                 {location.roadAddress ? (
+                  /*
+                    주소를 한 번 채우면 입력칸이 잠기므로, 좌표를 못 구했을 때
+                    다시 검색할 길을 열어 둔다. 이 버튼이 없으면 등록이 막힌 채로
+                    주소를 고칠 방법이 없다.
+                  */
                   <Input
+                    layout="with-button"
                     disabled
                     value={location.roadAddress}
                     className="disabled:border-zinc-400!"
+                    errorText={
+                      addressErrorKeys.includes(location.key)
+                        ? ADDRESS_GEOCODE_FAILED_MESSAGE
+                        : undefined
+                    }
+                    button={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setAddressSearchTargetKey(location.key);
+                          setAddressSearchState("default");
+                          setAddressManualError(null);
+                        }}
+                      >
+                        주소 변경
+                      </Button>
+                    }
                   />
                 ) : (
                   <button
@@ -280,6 +363,7 @@ export function FestivalRegisterForm() {
                     onClick={() => {
                       setAddressSearchTargetKey(location.key);
                       setAddressSearchState("default");
+                      setAddressManualError(null);
                     }}
                     className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 body-regular text-zinc-950 transition-colors hover:bg-zinc-50"
                   >
@@ -352,7 +436,12 @@ export function FestivalRegisterForm() {
         <p className="body-small text-error">{getApiErrorMessage(createMutation.error)}</p>
       ) : null}
 
-      <Bottombar onCancel={() => setCancelDialogOpen(true)} onSubmit={handleSubmitClick} />
+      <Bottombar
+        onCancel={() => setCancelDialogOpen(true)}
+        onSubmit={handleSubmitClick}
+        submitLabel={geocodePending ? "주소 확인 중..." : undefined}
+        submitDisabled={geocodePending}
+      />
 
       <SearchDialog
         open={festivalSearchOpen}
@@ -375,7 +464,7 @@ export function FestivalRegisterForm() {
         noResultSubtext="하단의 직접 입력을 눌러 축제명을 등록해 주세요"
         onSelectResult={(result) => {
           const series = festivalSearchResults.find((item) => item.seriesId === result.id);
-          if (series) applyFestivalSeries(series);
+          if (series) void applyFestivalSeries(series);
         }}
         onManualInput={(value) => {
           setName(value);
@@ -389,6 +478,7 @@ export function FestivalRegisterForm() {
           if (!next) {
             setAddressSearchTargetKey(null);
             setAddressSearchState("default");
+            setAddressManualError(null);
           }
         }}
         title="주소 찾기"
@@ -412,10 +502,34 @@ export function FestivalRegisterForm() {
             });
           setAddressSearchTargetKey(null);
         }}
-        onManualInput={(value) => {
-          if (addressSearchTargetKey)
-            updateLocation(addressSearchTargetKey, { roadAddress: value });
-          setAddressSearchTargetKey(null);
+        manualInputPending={addressManualPending}
+        manualInputError={addressManualError}
+        onManualInput={async (value) => {
+          const targetKey = addressSearchTargetKey;
+          if (!targetKey) return;
+          if (value.length === 0) {
+            setAddressManualError("주소를 입력해 주세요.");
+            return;
+          }
+          /*
+            직접 입력한 주소에는 좌표가 없다. 여기서 바로 지오코딩해서, 좌표를
+            구한 주소만 폼에 넣는다. 못 구하면 다이얼로그를 닫지 않고 사유를 띄워
+            검색으로 다시 고르게 한다 — 예전에는 그대로 통과시켜 등록 단계에서
+            이유 없는 400으로 끝났다.
+          */
+          setAddressManualError(null);
+          setAddressManualPending(true);
+          try {
+            const coordinate = await geocodeAddress(value);
+            if (!coordinate) {
+              setAddressManualError(ADDRESS_GEOCODE_FAILED_MESSAGE);
+              return;
+            }
+            updateLocation(targetKey, { roadAddress: value, ...coordinate });
+            setAddressSearchTargetKey(null);
+          } finally {
+            setAddressManualPending(false);
+          }
         }}
       />
 
@@ -437,7 +551,7 @@ export function FestivalRegisterForm() {
         confirmLabel="등록"
         confirmVariant="primary"
         confirmPending={createMutation.isPending}
-        onConfirm={() => createMutation.mutate()}
+        onConfirm={() => createMutation.mutate(submitLocations)}
       />
     </div>
   );
