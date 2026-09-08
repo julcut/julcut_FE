@@ -11,10 +11,7 @@ import { MapMetric } from "@/components/map/MapMetric";
 import { MapZoomControls } from "@/components/map/MapZoomControls";
 import { getCurrentMap, getMapEditor } from "@/features/boothmap/api";
 import { boothsToQueuePathItems } from "@/features/boothmap/QueuePathLayer";
-import {
-  presentationBoundary,
-  presentationOverlay,
-} from "@/features/boothmap/mapPresentation";
+import { presentationBoundary, presentationOverlay } from "@/features/boothmap/mapPresentation";
 import { primaryFestivalCenter } from "@/features/boothmap/mapCenter";
 import { getManagedFestival } from "@/features/festivals/api";
 import { formatDday } from "@/features/festivals/dateFormat";

@@ -58,11 +58,7 @@ import {
 } from "./mapPresentation";
 import { cornersFromAnchor } from "./overlayProjection";
 import { PamphletOverlay } from "./PamphletOverlay";
-import {
-  uniqueVertices,
-  validateBoundary,
-  withoutClosingDuplicate,
-} from "./polygonGeometry";
+import { uniqueVertices, validateBoundary, withoutClosingDuplicate } from "./polygonGeometry";
 import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
@@ -545,12 +541,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   // 같은 지도·같은 seedToken에서는 한 번만 채워 사용자의 편집을 덮어쓰지 않는다.
   const seedKey = editorQuery.data ? `${editorQuery.data.mapId}:${seedToken}` : null;
   if (editorQuery.data && seedKey !== null && seedKey !== seededKey) {
-    applyPartitionedNodes(
-      editorQuery.data.nodes,
-      setBooths,
-      setShapes,
-      setPreservedNodes,
-    );
+    applyPartitionedNodes(editorQuery.data.nodes, setBooths, setShapes, setPreservedNodes);
     setSiteBoundary(presentationBoundary(editorQuery.data.presentation));
     setPamphlet(presentationOverlay(editorQuery.data.presentation));
     setDraftPoints([]);
@@ -1309,7 +1300,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                 return;
               }
               if (drawTool === "boundary") {
-                setBoundaryDraft((prev) => [...prev, { lat: latLng.getLat(), lng: latLng.getLng() }]);
+                setBoundaryDraft((prev) => [
+                  ...prev,
+                  { lat: latLng.getLat(), lng: latLng.getLng() },
+                ]);
                 return;
               }
               if (drawTool === "queue-line" && queueDraftId) {
