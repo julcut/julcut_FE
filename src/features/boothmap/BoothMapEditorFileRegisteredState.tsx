@@ -37,6 +37,7 @@ import {
 } from "./geometryWgs84";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
+import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
 import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
 import { useEditHistory } from "./useEditHistory";
@@ -242,6 +243,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     if (!selectedBooth || !kakaoMapRef.current || !window.kakao?.maps) return;
     kakaoMapRef.current.panTo(new window.kakao.maps.LatLng(selectedBooth.lat, selectedBooth.lng));
   }, [selectedBooth]);
+
+  // 서버 데이터를 새로 받을 때마다(최초 진입, AI 분석 완료 등) 부스 전체가 보이도록
+  // 한 번 맞춘다. 그 뒤로는 사용자가 옮기고 확대한 위치를 존중한다.
+  const [fittedKey, setFittedKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!seededKey || fittedKey === seededKey || mapLoading) return;
+    if (fitBoothBounds(kakaoMapRef.current, booths)) setFittedKey(seededKey);
+  }, [fittedKey, seededKey, mapLoading, booths]);
   const pendingGroupMembers = useMemo(
     () => (groupPopoverOpen ? booths.filter((booth) => checkedIds.has(booth.id)) : []),
     [booths, checkedIds, groupPopoverOpen],
@@ -689,7 +698,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             className="h-full w-full"
             onCreate={(map) => {
               kakaoMapRef.current = map;
-              map.setMinLevel(2);
+              map.setMinLevel(1);
               map.setMaxLevel(8);
             }}
             onClick={(_target, mouseEvent) => {
