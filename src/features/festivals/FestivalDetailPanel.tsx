@@ -132,6 +132,12 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
   const displayStartDate = startDate ?? toDisplayDate(festival.startDate ?? "");
   const displayEndDate = endDate ?? toDisplayDate(festival.endDate ?? "");
+  /*
+    종료된 축제의 정보와 부스 배치는 결과리포트가 근거로 삼는 자료라, 뒤늦게 바뀌면
+    이미 뽑은 리포트와 어긋난다. 그래서 축제가 끝나면 이 화면을 읽기 전용으로 돌린다.
+    삭제는 여전히 남겨 둔다 — 잘못 만든 축제를 정리할 길까지 막을 이유는 없다.
+  */
+  const isCompleted = festival.progressStatus === "COMPLETED";
 
   function handleEditClick() {
     const updatedName = (name ?? festival?.festivalName ?? "").trim();
@@ -165,13 +171,28 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         <div className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">축제 정보</p>
 
+          {isCompleted ? (
+            <div className="flex flex-col gap-1 rounded-md bg-zinc-100 px-4 py-3">
+              <p className="body-small-bold text-zinc-950">종료된 축제입니다.</p>
+              <p className="body-caption text-zinc-950">
+                결과리포트가 이 정보를 근거로 삼기 때문에 축제 정보와 부스 배치는 더 이상 수정할 수
+                없습니다.
+              </p>
+            </div>
+          ) : null}
+
           <Input
             label="축제명"
             layout="with-button"
+            disabled={isCompleted}
             value={name ?? festival.festivalName ?? ""}
             onChange={(event) => setName(event.target.value)}
             button={
-              <Button type="button" onClick={() => setFestivalSearchOpen(true)}>
+              <Button
+                type="button"
+                disabled={isCompleted}
+                onClick={() => setFestivalSearchOpen(true)}
+              >
                 축제 검색
               </Button>
             }
@@ -181,6 +202,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             <label className="body-small-bold text-zinc-950">내용</label>
             <Textarea
               rows={3}
+              disabled={isCompleted}
               value={description ?? festival.description ?? ""}
               onChange={(event) => setDescription(event.target.value)}
             />
@@ -191,6 +213,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
             <div className="flex flex-col gap-2">
               <Input disabled value={festival.address ?? ""} />
               <Input
+                disabled={isCompleted}
                 value={detailAddress ?? festival.detailAddress ?? ""}
                 onChange={(event) => setDetailAddress(event.target.value)}
               />
@@ -204,6 +227,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
               placeholder="YYYY.mm.dd"
               inputMode="numeric"
               maxLength={10}
+              disabled={isCompleted}
               value={displayStartDate}
               onChange={(event) => setStartDate(formatDateInput(event.target.value))}
             />
@@ -213,6 +237,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
               placeholder="YYYY.mm.dd"
               inputMode="numeric"
               maxLength={10}
+              disabled={isCompleted}
               value={displayEndDate}
               onChange={(event) => setEndDate(formatDateInput(event.target.value))}
             />
@@ -223,15 +248,17 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
         <div className="relative min-h-[360px] xl:col-span-2 xl:min-h-[calc(100vh-252px)] overflow-hidden rounded-lg bg-zinc-100">
           <FestivalLocationMap locations={festival?.locations} />
-          <Button
-            type="button"
-            variant="primary"
-            icon={<Pencil1Icon />}
-            className="absolute top-4 right-4 z-10 shadow-md"
-            onClick={() => router.push(`/console/festivals/${festivalId}/boothmap`)}
-          >
-            부스지도 수정
-          </Button>
+          {isCompleted ? null : (
+            <Button
+              type="button"
+              variant="primary"
+              icon={<Pencil1Icon />}
+              className="absolute top-4 right-4 z-10 shadow-md"
+              onClick={() => router.push(`/console/festivals/${festivalId}/boothmap`)}
+            >
+              부스지도 수정
+            </Button>
+          )}
         </div>
       </div>
 
@@ -239,6 +266,7 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         cancelLabel="삭제하기"
         onCancel={() => setDeleteDialogOpen(true)}
         submitLabel="수정하기"
+        submitDisabled={isCompleted}
         onSubmit={handleEditClick}
       />
 

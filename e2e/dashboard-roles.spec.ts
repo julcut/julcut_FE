@@ -5,11 +5,14 @@ const dashboardPath = `/console/festivals/${festivalId}/dashboard`;
 
 type Role = "FESTIVAL_OWNER" | "SUB_ADMIN";
 
+type ProgressStatus = "UPCOMING" | "ONGOING" | "COMPLETED";
+
 async function mockDashboard(
   page: Page,
   role: Role,
   accountKind: "GOVERNMENT" | "CONTRACTOR",
   missingMap = false,
+  progressStatus: ProgressStatus = "ONGOING",
 ) {
   const requests: string[] = [];
   await page.route("**/api/**", async (route) => {
@@ -33,6 +36,9 @@ async function mockDashboard(
         festivalName: "테스트 축제",
         role,
         festivalStatus: "DRAFT",
+        progressStatus,
+        startDate: "2026-10-01",
+        endDate: "2026-10-03",
         locations: [],
       };
     } else if (path === `/api/festivals/${festivalId}/dashboard`) {
@@ -101,12 +107,11 @@ for (const scenario of [
       "aria-current",
       "page",
     );
-    const edit = page.getByRole("button", {
-      name: scenario.role === "FESTIVAL_OWNER" ? "수정하기" : "수정 불가",
-      exact: true,
-    });
-    if (scenario.role === "FESTIVAL_OWNER") await expect(edit).toBeEnabled();
-    else await expect(edit).toBeDisabled();
+    // 부스맵 편집 권한이 없는 운영자에게는 버튼 자체를 노출하지 않는다.
+    const isOwner = scenario.role === "FESTIVAL_OWNER";
+    const edit = page.getByRole("button", { name: "수정하기", exact: true });
+    if (isOwner) await expect(edit).toBeEnabled();
+    else await expect(edit).toHaveCount(0);
 
     await page.getByRole("button", { name: /먹거리 구역/ }).click();
     await expect(
@@ -128,11 +133,14 @@ for (const scenario of [
     });
     expect(bounds).toEqual({ left: 32, top: 40, bottom: 40 });
     const outer = await sidebar.locator("..").locator("..").boundingBox();
-    const button = await edit.boundingBox();
     const zoom = await page.getByRole("button", { name: "지도 축소", exact: true }).boundingBox();
-    expect(outer && button && zoom).toBeTruthy();
-    expect(button!.y - outer!.y).toBe(40);
-    expect(outer!.x + outer!.width - button!.x - button!.width).toBe(32);
+    expect(outer && zoom).toBeTruthy();
+    if (isOwner) {
+      const button = await edit.boundingBox();
+      expect(button).toBeTruthy();
+      expect(button!.y - outer!.y).toBe(40);
+      expect(outer!.x + outer!.width - button!.x - button!.width).toBe(32);
+    }
     expect(outer!.x + outer!.width - zoom!.x - zoom!.width).toBe(32);
     const metrics = await page
       .getByText("현재 방문자수", { exact: true })
@@ -144,6 +152,59 @@ for (const scenario of [
     expect(metrics!.y - zoom!.y - zoom!.height).toBe(24);
   });
 }
+
+test("진행예정 축제의 대시보드는 실시간 지표 대신 준비 현황을 보여준다", async ({ page }) => {
+  const requests = await mockDashboard(page, "FESTIVAL_OWNER", "GOVERNMENT", false, "UPCOMING");
+  await page.goto(dashboardPath);
+  await expect(page.getByText("등록된 부스", { exact: true })).toBeVisible();
+  await expect(page.getByText("개막까지", { exact: true })).toBeVisible();
+  await expect(page.getByText("활성 대기열", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("현재 방문자수", { exact: true })).toHaveCount(0);
+  // 시작하지 않은 축제에 실시간 조회를 걸지 않는다.
+  expect(requests.filter((request) => request.includes("/operations/"))).toEqual([]);
+});
+
+test("종료된 축제의 대시보드는 부스맵 수정을 막고 결과리포트로 안내한다", async ({ page }) => {
+  await mockDashboard(page, "FESTIVAL_OWNER", "GOVERNMENT", false, "COMPLETED");
+  await page.goto(dashboardPath);
+  await expect(page.getByText("종료된 축제입니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "결과리포트 보기", exact: true })).toHaveAttribute(
+    "href",
+    `/console/festivals/${festivalId}/report`,
+  );
+  await expect(page.getByRole("button", { name: "수정하기", exact: true })).toBeDisabled();
+});
+
+test("부스가 하나도 없으면 부스맵을 만들라고 안내한다", async ({ page }) => {
+  await mockDashboard(page, "FESTIVAL_OWNER", "GOVERNMENT");
+  // 나중에 등록한 라우트가 먼저 매칭되므로 부스 없는 응답을 뒤에 덮어씌운다.
+  await page.route("**/api/festivals/*/dashboard", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 0,
+        message: "OK",
+        data: {
+          festivalId,
+          festivalName: "테스트 축제",
+          dataAvailable: false,
+          operatingStatus: "OPERATING",
+          currentVisitorCount: null,
+          activeQueueCount: null,
+          averageWaitMinutes: null,
+          booths: [],
+          zones: [],
+        },
+      }),
+    });
+  });
+  await page.goto(dashboardPath);
+  await expect(page.getByText("아직 등록된 부스가 없습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "부스맵 만들기", exact: true })).toHaveAttribute(
+    "href",
+    `/console/festivals/${festivalId}/boothmap`,
+  );
+});
 
 test("현재 지도가 없어도 부스를 표시하고 지도를 생성하지 않는다", async ({ page }) => {
   const requests = await mockDashboard(page, "FESTIVAL_OWNER", "GOVERNMENT", true);
@@ -208,7 +269,7 @@ for (const suffix of ["", "/operators", "/operators/test-admin", "/report"]) {
     await mockDashboard(page, "SUB_ADMIN", "GOVERNMENT");
     await page.goto(`/console/festivals/${festivalId}${suffix}`);
     await expect(page).toHaveURL(dashboardPath);
-    await expect(page.getByRole("button", { name: "수정 불가", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "수정하기", exact: true })).toHaveCount(0);
   });
 }
 

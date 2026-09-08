@@ -2,6 +2,8 @@ export type CongestionLevel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface Booth {
   boothId: string;
+  /** 이 부스의 대기열(줄) 식별자. 대기열 조회를 하지 않는 화면에서는 비어 있다. */
+  queueId?: string;
   name: string;
   zoneId: string;
   /** Kakao 지도 위 부스 핀 좌표. 좌표가 등록되지 않은 부스는 비어 있다. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDownIcon, ChevronRightIcon, TargetIcon } from "@radix-ui/react-icons";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MapSidePanel } from "@/components/map/MapSidePanel";
@@ -68,6 +68,8 @@ export interface BoothZoneListProps {
   onSelectBooth: (booth: Booth) => void;
   /** 목록 위에 표시할 제목. 기본값은 "축제부스". */
   title?: string;
+  /** 부스가 한 개도 없을 때 목록 자리에 보여줄 안내. 생략하면 아무것도 그리지 않는다. */
+  emptyContent?: ReactNode;
   className?: string;
 }
 
@@ -80,30 +82,33 @@ export function BoothZoneList({
   selectedBoothId,
   onSelectBooth,
   title = "축제부스",
+  emptyContent,
   className,
 }: BoothZoneListProps) {
   const [openZoneId, setOpenZoneId] = useState<string | null>(null);
+  const boothCount = zones.reduce((total, zone) => total + zone.booths.length, 0);
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <p className="body-large-bold px-2 py-1.5 text-zinc-950">
-        {title}{" "}
-        <span className="text-primary">
-          {zones.reduce((total, zone) => total + zone.booths.length, 0)}
-        </span>
+        {title} <span className="text-primary">{boothCount}</span>
       </p>
-      <div className="flex flex-col gap-1">
-        {zones.map((zone) => (
-          <ZoneSection
-            key={zone.zoneId}
-            zone={zone}
-            open={openZoneId === zone.zoneId}
-            onOpenChange={(open) => setOpenZoneId(open ? zone.zoneId : null)}
-            selectedBoothId={selectedBoothId}
-            onSelectBooth={onSelectBooth}
-          />
-        ))}
-      </div>
+      {boothCount === 0 ? (
+        emptyContent
+      ) : (
+        <div className="flex flex-col gap-1">
+          {zones.map((zone) => (
+            <ZoneSection
+              key={zone.zoneId}
+              zone={zone}
+              open={openZoneId === zone.zoneId}
+              onOpenChange={(open) => setOpenZoneId(open ? zone.zoneId : null)}
+              selectedBoothId={selectedBoothId}
+              onSelectBooth={onSelectBooth}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -112,11 +117,13 @@ export function BoothTreeSidebar({
   zones,
   selectedBoothId,
   onSelectBooth,
+  emptyContent,
   className,
 }: {
   zones: BoothZone[];
   selectedBoothId: string | undefined;
   onSelectBooth: (booth: Booth) => void;
+  emptyContent?: ReactNode;
   className?: string;
 }) {
   return (
@@ -125,6 +132,7 @@ export function BoothTreeSidebar({
         zones={zones}
         selectedBoothId={selectedBoothId}
         onSelectBooth={onSelectBooth}
+        emptyContent={emptyContent}
       />
     </MapSidePanel>
   );
