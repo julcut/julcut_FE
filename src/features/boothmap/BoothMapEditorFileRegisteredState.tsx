@@ -377,7 +377,25 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     onCompleted: handleAnalysisCompleted,
   });
   // 분석 중에는 백엔드가 저장을 거부한다. 화면에서 막지 않으면 의미 없는 409만 돌아온다.
-  const editingLocked = analysis.isRunning || editorQuery.data?.roadmapStatus === "ANALYZING";
+  const analyzing = analysis.isRunning || editorQuery.data?.roadmapStatus === "ANALYZING";
+  /*
+    종료된 축제의 부스 배치는 결과리포트의 근거 자료라 뒤늦게 바뀌면 안 된다.
+    축제관리의 진입 버튼만 숨기면 주소를 직접 입력해 편집하고 저장까지 할 수 있어,
+    편집기 자체를 분석 중과 같은 방식으로 잠근다. 보기는 막지 않는다 —
+    지난 축제의 배치를 확인하는 것은 정당한 사용이다.
+  */
+  const isCompleted = festivalQuery.data?.progressStatus === "COMPLETED";
+  const editingLocked = analyzing || isCompleted;
+  const editLockReason = isCompleted
+    ? "종료된 축제의 부스맵은 수정할 수 없습니다."
+    : analyzing
+      ? "AI 분석이 끝난 뒤에 편집할 수 있습니다."
+      : null;
+  const saveLockReason = isCompleted
+    ? "종료된 축제의 부스맵은 저장할 수 없습니다."
+    : analyzing
+      ? "AI 분석이 끝난 뒤에 저장할 수 있습니다."
+      : undefined;
   const hasBlueprintImage = !!editorQuery.data?.displayImageUrl;
   const reviewRequiredCount = booths.filter((booth) => booth.uncertain).length;
 
@@ -587,7 +605,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           <Checkbox
             checked={checkedIds.has(booth.id)}
             onCheckedChange={() => toggleChecked(booth.id)}
-            disabled={booth.nodeType !== "BOOTH"}
+            disabled={booth.nodeType !== "BOOTH" || editingLocked}
             className="border-zinc-200"
           />
         </span>
@@ -613,9 +631,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           ) : null}
         </button>
         <span
-          onMouseDown={() => setDraggableRowId(booth.id)}
+          onMouseDown={() => {
+            if (!editingLocked) setDraggableRowId(booth.id);
+          }}
           onMouseUp={() => setDraggableRowId(null)}
-          className="shrink-0 cursor-grab touch-none text-zinc-400 active:cursor-grabbing"
+          className={cn(
+            "shrink-0 touch-none text-zinc-400",
+            editingLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+          )}
         >
           <HamburgerMenuIcon />
         </span>
@@ -783,7 +806,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                 </CustomOverlayMap>
               );
             })}
-            {selectedBooth ? (
+            {selectedBooth && !editingLocked ? (
               <CustomOverlayMap
                 position={{ lat: selectedBooth.lat, lng: selectedBooth.lng }}
                 {...POPOVER_ANCHORS}
@@ -890,6 +913,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               : null}
             {selectedZone &&
             !selectedBooth &&
+            !editingLocked &&
             checkedIds.size === 0 &&
             selectedZoneMembers.length > 0 ? (
               <CustomOverlayMap
@@ -957,22 +981,26 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           </p>
           <div className="flex flex-col gap-2 rounded-md bg-zinc-100 px-4 py-3 text-left">
             <p className="body-small-bold text-zinc-950">
-              {editingLocked
-                ? "AI가 배치도를 읽고 있습니다."
-                : booths.length === 0
-                  ? "아직 찍은 부스가 없습니다."
-                  : reviewRequiredCount > 0
-                    ? "AI가 찾은 부스를 확인해 주세요."
-                    : "지도에서 부스를 편집하세요."}
+              {isCompleted
+                ? "종료된 축제입니다."
+                : analyzing
+                  ? "AI가 배치도를 읽고 있습니다."
+                  : booths.length === 0
+                    ? "아직 찍은 부스가 없습니다."
+                    : reviewRequiredCount > 0
+                      ? "AI가 찾은 부스를 확인해 주세요."
+                      : "지도에서 부스를 편집하세요."}
             </p>
             <p className="body-caption text-zinc-950">
-              {editingLocked
-                ? "분석이 끝나면 찾은 부스가 지도에 표시됩니다. 그때까지 편집과 저장은 막힙니다."
-                : booths.length === 0
-                  ? "오른쪽 핀 도구를 켜 지도를 클릭하거나, 배치도 이미지를 올려 AI 분석을 돌리세요."
-                  : reviewRequiredCount > 0
-                    ? "주황색 핀은 AI가 찾은 위치라 정확하지 않을 수 있습니다. 끌어서 옮기고 이름을 확인해 주세요."
-                    : "핀을 선택해 이름을 바꾸고, 여러 개를 골라 구역으로 묶을 수 있습니다."}
+              {isCompleted
+                ? "결과리포트가 이 배치를 근거로 삼기 때문에 부스맵은 더 이상 수정할 수 없습니다. 지난 축제의 배치는 그대로 확인할 수 있습니다."
+                : analyzing
+                  ? "분석이 끝나면 찾은 부스가 지도에 표시됩니다. 그때까지 편집과 저장은 막힙니다."
+                  : booths.length === 0
+                    ? "오른쪽 핀 도구를 켜 지도를 클릭하거나, 배치도 이미지를 올려 AI 분석을 돌리세요."
+                    : reviewRequiredCount > 0
+                      ? "주황색 핀은 AI가 찾은 위치라 정확하지 않을 수 있습니다. 끌어서 옮기고 이름을 확인해 주세요."
+                      : "핀을 선택해 이름을 바꾸고, 여러 개를 골라 구역으로 묶을 수 있습니다."}
             </p>
           </div>
 
@@ -1018,11 +1046,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         <div className="flex items-center gap-2">
           <span
             title={
-              editingLocked
-                ? "AI 분석이 끝난 뒤에 편집할 수 있습니다."
-                : canUndo
-                  ? "실행취소 (Ctrl/⌘+Z)"
-                  : "편집 내용이 없어 실행취소할 수 없습니다."
+              editLockReason ??
+              (canUndo ? "실행취소 (Ctrl/⌘+Z)" : "편집 내용이 없어 실행취소할 수 없습니다.")
             }
           >
             <IconButton
@@ -1035,11 +1060,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           </span>
           <span
             title={
-              editingLocked
-                ? "AI 분석이 끝난 뒤에 편집할 수 있습니다."
-                : canRedo
-                  ? "다시실행 (Shift+Ctrl/⌘+Z)"
-                  : "편집 내용이 없어 다시실행할 수 없습니다."
+              editLockReason ??
+              (canRedo ? "다시실행 (Shift+Ctrl/⌘+Z)" : "편집 내용이 없어 다시실행할 수 없습니다.")
             }
           >
             <IconButton
@@ -1068,6 +1090,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             variant="outline"
             icon={<FileIcon />}
             disabled={replaceMutation.isPending || editingLocked}
+            title={editLockReason ?? undefined}
             onClick={() => setAnalyzeDialogOpen(true)}
           >
             {replaceMutation.isPending
@@ -1080,7 +1103,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             type="button"
             variant="primary"
             disabled={saveMutation.isPending || editingLocked}
-            title={editingLocked ? "AI 분석이 끝난 뒤에 저장할 수 있습니다." : undefined}
+            title={saveLockReason}
             onClick={() => setSaveDialogOpen(true)}
           >
             {saveMutation.isPending ? "저장 중..." : "저장하기"}

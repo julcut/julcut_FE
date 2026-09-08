@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { TemporaryPasswordCard } from "@/components/ui/TemporaryPasswordCard";
+import { getManagedFestival } from "@/features/festivals/api";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { createFieldStaff, deleteFieldStaffBulk, getFieldStaffList } from "./api";
 import type { CreateFieldStaffResult } from "./types";
@@ -36,11 +37,22 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
   // 임시 비밀번호는 생성 응답에서만 내려오므로 화면에 남겨 두고 직접 전달하게 한다.
   const [created, setCreated] = useState<CreateFieldStaffResult | null>(null);
 
+  const festivalQuery = useQuery({
+    queryKey: ["managed-festival", festivalId],
+    queryFn: () => getManagedFestival(festivalId),
+  });
   const staffListQuery = useQuery({
     queryKey: ["field-staff", festivalId],
     queryFn: () => getFieldStaffList(festivalId),
   });
   const staffList = staffListQuery.data ?? [];
+  /*
+    종료된 축제에 스태프를 새로 붙이면 그 계정이 현장 화면에서 대기열과 혼잡도를 갱신할 수
+    있고, 그 값은 결과리포트의 근거가 된다. 그래서 축제가 끝나면 추가는 막는다.
+    삭제는 축제관리와 같은 이유로 남겨 둔다 — 잘못 만든 계정을 정리할 길이 필요하고,
+    종료된 축제에 로그인 가능한 계정이 남아 있는 편이 오히려 위험하다.
+  */
+  const isCompleted = festivalQuery.data?.progressStatus === "COMPLETED";
 
   const createMutation = useMutation({
     mutationFn: () => createFieldStaff(festivalId, { loginId, name, phoneNumber }),
@@ -95,6 +107,16 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
         <section className="col-span-1 flex min-w-0 flex-col gap-4 rounded-lg border border-zinc-300 bg-white px-5 py-6 sm:px-8">
           <p className="body-large-bold text-zinc-950">스태프 추가</p>
 
+          {isCompleted ? (
+            <div className="flex flex-col gap-1 rounded-md bg-zinc-100 px-4 py-3">
+              <p className="body-small-bold text-zinc-950">종료된 축제입니다.</p>
+              <p className="body-caption text-zinc-950">
+                결과리포트가 현장 기록을 근거로 삼기 때문에 스태프를 새로 추가할 수 없습니다. 등록된
+                계정을 정리하는 삭제는 그대로 사용할 수 있습니다.
+              </p>
+            </div>
+          ) : null}
+
           {created ? (
             <TemporaryPasswordCard
               title={`${created.name}(${created.loginId}) 스태프 계정이 생성되었습니다.`}
@@ -107,6 +129,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
             className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
+              if (isCompleted) return;
               setCreated(null);
               createMutation.mutate();
             }}
@@ -114,6 +137,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
             <Input
               label="이름"
               placeholder="이름"
+              disabled={isCompleted}
               value={name}
               onChange={(event) => setName(event.target.value)}
               required
@@ -128,6 +152,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
             <Input
               label="근무구역"
               placeholder="근무구역"
+              disabled={isCompleted}
               value={department}
               onChange={(event) => setDepartment(event.target.value)}
               required
@@ -136,6 +161,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
             <Input
               label="전화번호"
               placeholder="전화번호"
+              disabled={isCompleted}
               value={phoneNumber}
               onChange={(event) => setPhoneNumber(formatPhoneNumber(event.target.value))}
               required
@@ -149,7 +175,11 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
             ) : null}
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={createMutation.isPending}>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || isCompleted}
+                title={isCompleted ? "종료된 축제에는 스태프를 추가할 수 없습니다." : undefined}
+              >
                 {createMutation.isPending ? "추가하는 중..." : "추가하기"}
               </Button>
             </div>
