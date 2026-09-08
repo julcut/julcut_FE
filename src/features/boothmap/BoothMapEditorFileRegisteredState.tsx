@@ -490,12 +490,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       if (!mapQuery.data?.mapId) {
         throw new Error("지도 정보를 불러오지 못했습니다.");
       }
-      // 부스를 전부 지운 경우에도 삭제 내역은 서버에 보내야 하므로, 지울 노드가 있으면 통과시킨다.
+      /*
+        부스를 전부 지운 경우에도 삭제 내역은 서버에 보내야 하므로, 지울 노드가 있으면
+        통과시킨다. 노드가 하나도 없어도 경계·팜플렛만 저장할 수 있다 — 서버가 표시
+        설정만 담긴 요청을 받아 준다. 다만 둘 다 없으면 저장할 것이 없다.
+      */
       const nodes = boothMapPinsToNodeChanges(booths, deletedNodeIds, shapes, preservedNodes);
-      if (nodes.length === 0) {
-        throw new Error(
-          "현재 서버는 노드 없이 경계·팜플렛만 저장할 수 없습니다. 핀을 추가한 뒤 저장해 주세요.",
-        );
+      if (nodes.length === 0 && !siteBoundary && !pamphlet) {
+        throw new Error("저장할 부스나 경계·팜플렛이 없습니다.");
       }
       if (siteBoundary) {
         const error = validateBoundary(siteBoundary);
