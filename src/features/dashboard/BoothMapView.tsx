@@ -8,9 +8,19 @@ import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
 import { PamphletOverlay } from "@/features/boothmap/PamphletOverlay";
 import { QueuePathLayer, type QueuePathItem } from "@/features/boothmap/QueuePathLayer";
+import { nodeTypeIcon, nodeTypeLabel } from "@/features/boothmap/nodeTypeIcons";
 import type { LocalPamphletOverlay } from "@/features/boothmap/mapPresentation";
 import type { LatLng } from "@/features/boothmap/latLng";
-import type { Booth } from "./types";
+import type { Booth, FacilityMarker } from "./types";
+
+/**
+ * 부스가 아닌 핀에 씌우는 동그란 아이콘 배지.
+ *
+ * 편집기 지도와 같은 규칙이다. 부스는 지도에 가장 많이 찍히는 유형이라 점으로 두고,
+ * 화장실·입구·출구·시설만 아이콘으로 구분한다.
+ */
+const PIN_ICON_CLASSES =
+  "flex size-5 items-center justify-center rounded-full border border-white bg-point-600 text-white shadow-sm [&_svg]:size-3";
 
 /** 지도 마커 위에 뜨는 부스 상세정보 말풍선. 아래쪽 중앙에서 마커를 향해 뾰족한 꼬리가 이어진다. */
 function BoothPopup({ booth, onClose }: { booth: Booth; onClose: () => void }) {
@@ -49,6 +59,7 @@ export function BoothMapView({
   booths,
   selectedBooth,
   onSelectBooth,
+  facilities = [],
   zoomStep = 0,
   center,
   showPopup = true,
@@ -58,6 +69,8 @@ export function BoothMapView({
   onZoomByWheel,
 }: {
   booths: Booth[];
+  /** 화장실·입구·출구 등 부스가 아닌 지도 시설. 아이콘으로만 표시하고 선택하지 않는다. */
+  facilities?: FacilityMarker[];
   selectedBooth: Booth | null;
   onSelectBooth: (booth: Booth | null) => void;
   /** 기본 확대 수준(4)에 대한 상대값. 낮을수록 확대된다. */
@@ -157,8 +170,31 @@ export function BoothMapView({
             strokeOpacity={0.9}
           />
         ) : null}
+        {/*
+          시설 핀은 부스 핀보다 아래에 깔고 클릭도 받지 않는다. 혼잡도·대기열이 붙지 않아
+          누를 것이 없고, 부스가 몰린 자리에서 선택을 가로채면 오히려 방해가 된다.
+        */}
+        {facilities.map((facility) => (
+          <CustomOverlayMap
+            key={facility.nodeId}
+            position={{ lat: facility.lat, lng: facility.lng }}
+            zIndex={5}
+          >
+            <span
+              role="img"
+              title={`${facility.name} (${nodeTypeLabel(facility.nodeType)})`}
+              aria-label={`${facility.name} ${nodeTypeLabel(facility.nodeType)}`}
+              className={PIN_ICON_CLASSES}
+            >
+              {nodeTypeIcon(facility.nodeType)}
+            </span>
+          </CustomOverlayMap>
+        ))}
         {pinnedBooths.map((booth) => {
           const isSelected = selectedBooth?.boothId === booth.boothId;
+          // 부스로 승인됐지만 지도에서 유형을 바꾼 노드는 그 유형 아이콘으로 그린다.
+          const pinType = booth.nodeType ?? "BOOTH";
+          const isIconPin = pinType !== "BOOTH";
           return (
             <CustomOverlayMap
               key={booth.boothId}
@@ -174,9 +210,15 @@ export function BoothMapView({
                   event.stopPropagation();
                   onSelectBooth(isSelected ? null : booth);
                 }}
-                className="flex size-3 items-center justify-center"
+                className={`flex items-center justify-center ${isIconPin ? "size-5" : "size-3"}`}
               >
-                {isSelected ? (
+                {isIconPin ? (
+                  <span
+                    className={`${PIN_ICON_CLASSES} ${isSelected ? "ring-2 ring-point-600/40" : ""}`}
+                  >
+                    {nodeTypeIcon(pinType)}
+                  </span>
+                ) : isSelected ? (
                   <span className="flex size-3 items-center justify-center rounded-full bg-point-600/25">
                     <span className="size-1 rounded-full bg-point-600" />
                   </span>

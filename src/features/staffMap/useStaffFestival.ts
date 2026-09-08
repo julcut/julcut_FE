@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { presentationBoundary, presentationOverlay } from "@/features/boothmap/mapPresentation";
+import type { NodeType } from "@/features/boothmap/types";
 import type { Booth, BoothZone, FestivalDashboard } from "@/features/dashboard/types";
 import { useStaffAuthStore } from "@/store/staffAuthStore";
 import { getFestivalQueues, getStaffFestivalDashboard, getStaffFestivalOperationsMap } from "./api";
@@ -21,11 +22,16 @@ export const STAFF_DASHBOARD_QUERY_KEY = "staff-festival-dashboard";
 export const STAFF_QUEUES_QUERY_KEY = "staff-festival-queues";
 export const STAFF_OPERATIONS_MAP_QUERY_KEY = "staff-festival-operations-map";
 
-function toBooth(booth: FestivalDashboard["booths"][number], zoneId: string): Booth {
+function toBooth(
+  booth: FestivalDashboard["booths"][number],
+  zoneId: string,
+  nodeType?: NodeType,
+): Booth {
   return {
     boothId: String(booth.boothId),
     name: booth.boothName,
     zoneId,
+    nodeType,
     lat: booth.lat ?? undefined,
     lng: booth.lng ?? undefined,
     congestionLevel: booth.congestionLevel ?? undefined,
@@ -72,6 +78,15 @@ export function useStaffFestival() {
     retry: false,
   });
 
+  // 노드 유형은 운영 지도 조회에만 있다. 대시보드 응답의 부스는 언제나 승인 부스다.
+  const nodeTypeByBoothId = useMemo(() => {
+    const map = new Map<number, NodeType>();
+    operationsMapQuery.data?.booths.forEach((booth) => {
+      if (booth.nodeType) map.set(booth.boothId, booth.nodeType);
+    });
+    return map;
+  }, [operationsMapQuery.data?.booths]);
+
   const zones = useMemo((): StaffZone[] => {
     const dashboard = dashboardQuery.data;
     if (!dashboard) return [];
@@ -92,7 +107,9 @@ export function useStaffFestival() {
         buildZone(
           UNZONED_ID,
           "전체",
-          dashboard.booths.map((booth) => toBooth(booth, UNZONED_ID)),
+          dashboard.booths.map((booth) =>
+            toBooth(booth, UNZONED_ID, nodeTypeByBoothId.get(booth.boothId)),
+          ),
         ),
       ];
     }
@@ -108,7 +125,7 @@ export function useStaffFestival() {
         (booth.roadmapNodePublicId ? zoneIdByNodeId.get(booth.roadmapNodePublicId) : undefined) ??
         UNZONED_ID;
       const list = boothsByZoneId.get(zoneId) ?? [];
-      list.push(toBooth(booth, zoneId));
+      list.push(toBooth(booth, zoneId, nodeTypeByBoothId.get(booth.boothId)));
       boothsByZoneId.set(zoneId, list);
     });
 
@@ -123,7 +140,7 @@ export function useStaffFestival() {
       result.push(buildZone(UNZONED_ID, "구역 미지정", unzoned));
     }
     return result;
-  }, [dashboardQuery.data]);
+  }, [dashboardQuery.data, nodeTypeByBoothId]);
 
   const booths = useMemo(() => zones.flatMap((zone) => zone.booths), [zones]);
 
@@ -141,6 +158,11 @@ export function useStaffFestival() {
   const siteBoundary = useMemo(
     () => presentationBoundary(operationsMapQuery.data?.presentation),
     [operationsMapQuery.data?.presentation],
+  );
+  // 화장실·입구·출구 등 부스가 아닌 시설 마커. 조회에 실패하면 빈 배열이다.
+  const facilities = useMemo(
+    () => operationsMapQuery.data?.facilities ?? [],
+    [operationsMapQuery.data?.facilities],
   );
 
   const mapCenter = useMemo(
@@ -169,6 +191,8 @@ export function useStaffFestival() {
     pamphlet,
     /** 부지 경계 폴리곤. 등록되지 않았거나 조회에 실패하면 null이다. */
     siteBoundary,
+    /** 부스가 아닌 지도 시설(화장실·입구·출구 등). */
+    facilities,
     mapCenter,
     summary: {
       congestionLevel: overallCongestion(booths),

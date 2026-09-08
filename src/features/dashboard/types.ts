@@ -1,4 +1,4 @@
-import type { MapPresentation } from "@/features/boothmap/types";
+import type { MapPresentation, NodeType } from "@/features/boothmap/types";
 export type CongestionLevel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface Booth {
@@ -7,6 +7,11 @@ export interface Booth {
   queueId?: string;
   name: string;
   zoneId: string;
+  /**
+   * 지도 노드 유형. 운영 지도 조회로 채운다.
+   * 승인 부스는 보통 `BOOTH`이고, 그때 지도에는 아이콘이 아니라 점으로 찍는다.
+   */
+  nodeType?: NodeType;
   /** Kakao 지도 위 부스 핀 좌표. 좌표가 등록되지 않은 부스는 비어 있다. */
   lat?: number;
   lng?: number;
@@ -113,6 +118,20 @@ export interface DashboardZone {
 }
 
 /**
+ * 부스가 아닌 지도 시설(화장실·입구·출구 등) 마커.
+ *
+ * 승인 부스와 성격이 달라 백엔드도 `booths`와 섞지 않고 따로 내려준다. 혼잡도·대기열이
+ * 붙지 않으므로 지도에서 선택 대상도 아니고, 부스 목록에도 들어가지 않는다.
+ */
+export interface FacilityMarker {
+  nodeId: string;
+  name: string;
+  nodeType: NodeType;
+  lat: number;
+  lng: number;
+}
+
+/**
  * 현장 운영 지도 조회(`GET /festivals/{festivalId}/operations/map`) 응답.
  *
  * 대시보드는 편집기 API(`.../maps/{mapId}/editor`)를 부르지 않는다. 그쪽은 총괄관리자
@@ -127,7 +146,11 @@ export interface FestivalOperationsMap {
     boothId: number;
     nodeId: string | null;
     name: string;
+    /** 노드 유형. 이 필드를 내려주지 않는 백엔드 버전에서는 비어 있다. */
+    nodeType?: NodeType;
     lat: number;
     lng: number;
   }[];
+  /** 시설 마커. 이 필드를 내려주지 않는 백엔드 버전에서는 비어 있다. */
+  facilities?: FacilityMarker[];
 }
