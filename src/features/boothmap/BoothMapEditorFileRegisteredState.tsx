@@ -68,7 +68,7 @@ import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
-import type { CreateCoordinateMapResponse, NodeType } from "./types";
+import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
 import { useEditHistory } from "./useEditHistory";
 import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
@@ -637,14 +637,28 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   });
 
   /*
-    분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
-    결과 문구는 지도 위 분석 안내 카드가 이미 같은 내용으로 보여 주므로 토스트를
-    따로 띄우지 않는다 — 같은 말이 두 번 떠서 화면만 가렸다.
+    분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채우고, 결과는
+    우측 상단 알림으로 알린다. 지도 위 카드는 진행 중일 때만 남는다.
   */
-  const handleAnalysisCompleted = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
-    setSeedToken((token) => token + 1);
-  }, [festivalId, queryClient]);
+  const handleAnalysisCompleted = useCallback(
+    async (status: MapAnalysisStatusResponse) => {
+      await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
+      setSeedToken((token) => token + 1);
+      if (status.acceptedCount > 0) {
+        toast.success(`부스 후보 ${status.acceptedCount}개를 찾았습니다.`, {
+          description:
+            status.rejectedCount > 0
+              ? `읽지 못한 ${status.rejectedCount}개는 제외했습니다. 위치와 이름을 확인해 주세요.`
+              : "위치와 이름을 확인한 뒤 저장해 주세요.",
+        });
+        return;
+      }
+      toast.info("배치도에서 부스를 찾지 못했습니다.", {
+        description: "핀 도구로 직접 찍거나, 더 선명한 배치도로 다시 시도해 주세요.",
+      });
+    },
+    [festivalId, queryClient],
+  );
 
   const analysis = useMapAnalysis({
     festivalId,
@@ -2142,7 +2156,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           boothListOpen && "hidden",
         )}
       >
-        {analysisNoticeKey && dismissedAnalysisKey !== analysisNoticeKey ? (
+        {/*
+          분석이 도는 동안에만 지도 위에 남긴다. 끝난 결과는 우측 상단 알림으로 나가므로
+          카드까지 띄우면 같은 말이 두 번 화면을 가린다.
+        */}
+        {analysis.isRunning && dismissedAnalysisKey !== analysisNoticeKey ? (
           <MapAnalysisProgressCard
             analysis={analysis}
             className="pointer-events-auto w-full"
