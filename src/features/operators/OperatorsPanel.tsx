@@ -2,6 +2,7 @@
 
 import { PersonIcon } from "@radix-ui/react-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Bottombar } from "@/components/ui/Bottombar";
@@ -298,21 +299,27 @@ export function OperatorsPanel({ festivalId }: { festivalId: string }) {
 
           {operators.length > 0 ? (
             <div className="flex flex-col divide-y divide-zinc-200">
+              {/*
+                항목 전체를 <label>로 감싸면 이름을 눌러도 체크박스만 토글돼 상세로 갈
+                길이 없다. 스태프 목록과 같은 구조로, 체크박스와 상세 링크를 나란히 둔다.
+              */}
               {operators.map((operator) => (
-                <label
-                  key={operator.adminId}
-                  className="flex cursor-pointer items-center gap-2 py-4"
-                >
+                <div key={operator.adminId} className="flex items-center gap-2 py-4">
                   <Checkbox
                     checked={selectedIds.has(operator.adminId)}
                     onCheckedChange={() => toggleOne(operator.adminId)}
                     aria-label={`${operator.name} 선택`}
                   />
-                  <PersonIcon className="size-4 shrink-0 text-secondary-600" />
-                  <p className="body-regular wrap-anywhere text-zinc-950">
-                    {operator.name}({operator.email})
-                  </p>
-                </label>
+                  <Link
+                    href={`/console/festivals/${festivalId}/operators/${operator.adminId}`}
+                    className="flex min-w-0 items-center gap-2"
+                  >
+                    <PersonIcon className="size-4 shrink-0 text-secondary-600" />
+                    <p className="body-regular wrap-anywhere text-zinc-950 hover:underline">
+                      {operator.name}({operator.email})
+                    </p>
+                  </Link>
+                </div>
               ))}
             </div>
           ) : null}
