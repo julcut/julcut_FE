@@ -2,9 +2,10 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { presentationBoundary, presentationOverlay } from "@/features/boothmap/mapPresentation";
 import type { Booth, BoothZone, FestivalDashboard } from "@/features/dashboard/types";
 import { useStaffAuthStore } from "@/store/staffAuthStore";
-import { getFestivalQueues, getStaffFestivalDashboard } from "./api";
+import { getFestivalQueues, getStaffFestivalDashboard, getStaffFestivalOperationsMap } from "./api";
 import type { FestivalQueue } from "./types";
 import { busiestBooth, centerOf, overallCongestion } from "./utils";
 
@@ -18,6 +19,7 @@ export interface StaffZone extends BoothZone {
 
 export const STAFF_DASHBOARD_QUERY_KEY = "staff-festival-dashboard";
 export const STAFF_QUEUES_QUERY_KEY = "staff-festival-queues";
+export const STAFF_OPERATIONS_MAP_QUERY_KEY = "staff-festival-operations-map";
 
 function toBooth(booth: FestivalDashboard["booths"][number], zoneId: string): Booth {
   return {
@@ -54,6 +56,20 @@ export function useStaffFestival() {
     queryKey: [STAFF_QUEUES_QUERY_KEY, festivalId],
     queryFn: () => getFestivalQueues(festivalId),
     enabled: Boolean(festivalId),
+  });
+
+  /*
+    부지 경계·팜플렛은 현장 운영 지도 조회로 받는다. 편집기 API(.../maps/{mapId}/editor)는
+    총괄관리자 전용 편집 계약이라 스태프 토큰으로는 열리지 않고, 스태프는 경계·팜플렛을
+    보기만 하면 된다. 지도 미등록·권한 부족은 재시도로 풀리지 않으므로 재시도하지 않고,
+    이 조회가 실패해도 부스 핀·줄·대기시간은 그대로 보여야 하므로 isLoading·error에
+    섞지 않는다.
+  */
+  const operationsMapQuery = useQuery({
+    queryKey: [STAFF_OPERATIONS_MAP_QUERY_KEY, festivalId],
+    queryFn: () => getStaffFestivalOperationsMap(festivalId),
+    enabled: Boolean(festivalId),
+    retry: false,
   });
 
   const zones = useMemo((): StaffZone[] => {
@@ -117,6 +133,16 @@ export function useStaffFestival() {
     return map;
   }, [queuesQuery.data]);
 
+  // PamphletOverlay는 corners 객체 참조가 바뀌면 오버레이를 다시 그리므로 참조를 고정한다.
+  const pamphlet = useMemo(
+    () => presentationOverlay(operationsMapQuery.data?.presentation),
+    [operationsMapQuery.data?.presentation],
+  );
+  const siteBoundary = useMemo(
+    () => presentationBoundary(operationsMapQuery.data?.presentation),
+    [operationsMapQuery.data?.presentation],
+  );
+
   const mapCenter = useMemo(
     () =>
       centerOf(
@@ -139,6 +165,10 @@ export function useStaffFestival() {
     zones,
     booths,
     queueByBoothId,
+    /** 팜플렛 이미지 오버레이. 등록되지 않았거나 조회에 실패하면 null이다. */
+    pamphlet,
+    /** 부지 경계 폴리곤. 등록되지 않았거나 조회에 실패하면 null이다. */
+    siteBoundary,
     mapCenter,
     summary: {
       congestionLevel: overallCongestion(booths),

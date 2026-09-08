@@ -98,6 +98,8 @@ export function StaffMapPanel() {
         zoomStep={zoomStep}
         center={festival.mapCenter}
         queues={boothsToQueuePathItems(festival.booths, festival.queueByBoothId)}
+        pamphlet={festival.pamphlet}
+        boundary={festival.siteBoundary}
         onZoomByWheel={(direction) => setZoomStep((step) => step + direction)}
       />
 
