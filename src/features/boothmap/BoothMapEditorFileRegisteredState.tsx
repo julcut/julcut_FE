@@ -138,6 +138,10 @@ function centroidOf(members: LocalBoothPin[]) {
 
 const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
 
+/** 배치도 맞춤 패널의 숫자 입력 공통 스타일. */
+const BLUEPRINT_INPUT_CLASSES =
+  "body-small h-9 w-24 rounded-md border border-zinc-200 px-2.5 text-zinc-950 focus:border-primary focus:outline-none";
+
 /** 지도에서 고를 수 있는 그리기 도구. 설계서 "5. 오버레이 버튼 영역2"의 핀·폴리곤·라인이다. */
 type DrawTool = "select" | "pin" | "polygon" | "line";
 
@@ -311,10 +315,36 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     [selectedZone, booths],
   );
 
+  /*
+    선택한 대상 위에 뜨는 팝오버가 좌측 목록·상단 버튼 줄·하단 카드에 가리지 않도록
+    필요한 만큼만 지도를 민다. 예전에는 무조건 화면 중앙으로 옮겼는데(panTo), 그러면
+    보고 있던 위치가 매번 튀는 데다 좁은 창에서는 여전히 목록에 가렸다.
+  */
+  const panPopoverIntoView = useCallback((lat: number, lng: number) => {
+    const map = kakaoMapRef.current;
+    const wrapper = mapWrapperRef.current;
+    if (!map || !wrapper || !window.kakao?.maps) return;
+    const { width, height } = wrapper.getBoundingClientRect();
+    const point = map
+      .getProjection()
+      .containerPointFromCoords(new window.kakao.maps.LatLng(lat, lng));
+    const wide = width >= 1024;
+    // 팝오버는 폭 256px, 높이 약 190px로 선택 지점 위쪽 가운데에 뜬다.
+    const left = (wide ? 344 : 16) + 128;
+    const right = width - (wide ? 112 : 72) - 128;
+    const top = 200;
+    const bottom = height - 120;
+    const dx = point.x < left ? point.x - left : point.x > right ? point.x - right : 0;
+    const dy = point.y < top ? point.y - top : point.y > bottom ? point.y - bottom : 0;
+    if (dx !== 0 || dy !== 0) map.panBy(dx, dy);
+  }, []);
+
   useEffect(() => {
-    if (!selectedBooth || !kakaoMapRef.current || !window.kakao?.maps) return;
-    kakaoMapRef.current.panTo(new window.kakao.maps.LatLng(selectedBooth.lat, selectedBooth.lng));
-  }, [selectedBooth]);
+    if (!selectedBooth) return;
+    panPopoverIntoView(selectedBooth.lat, selectedBooth.lng);
+    // 선택이 바뀔 때만 민다. 끌어 옮기는 중에는 좌표가 계속 바뀌므로 id로만 걸어 둔다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBooth?.id, panPopoverIntoView]);
 
   // 서버 데이터를 새로 받을 때마다(최초 진입, AI 분석 완료 등) 부스 전체가 보이도록
   // 한 번 맞춘다. 그 뒤로는 사용자가 옮기고 확대한 위치를 존중한다.
@@ -365,6 +395,13 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     () => shapes.find((shape) => shape.id === selectedShapeId) ?? null,
     [shapes, selectedShapeId],
   );
+  useEffect(() => {
+    if (!selectedShape) return;
+    const anchorPoint = shapeAnchor(selectedShape);
+    panPopoverIntoView(anchorPoint.lat, anchorPoint.lng);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedShape?.id, panPopoverIntoView]);
+
   const mapCenter = editorQuery.data?.center ?? mapQuery.data?.center ?? festivalCenter;
 
   const saveMutation = useMutation({
@@ -711,6 +748,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   /** 폴리곤·라인 그리기를 시작한다. 같은 버튼을 다시 누르면 그리기를 접는다. */
   function startShapeTool(kind: "polygon" | "line") {
     setPinTypeMenuOpen(false);
+    setBlueprintPanelOpen(false);
     setSelectedShapeId(null);
     setEditingBoothId(null);
     setDraftPoints([]);
@@ -1723,6 +1761,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               onClick={() => startShapeTool("polygon")}
             />
           </span>
+          <span title={editLockReason ?? "라인 그리기 — 지도를 눌러 꺾은점을 찍습니다"}>
+            <IconButton
+              icon={<RulerHorizontalIcon className="size-5" />}
+              aria-label="라인 추가"
+              aria-pressed={drawTool === "line"}
+              disabled={editingLocked}
+              className={cn("text-zinc-950", drawTool === "line" && "ring-2 ring-primary")}
+              onClick={() => startShapeTool("line")}
+            />
+          </span>
           {hasBlueprintImage ? (
             <span
               title={
@@ -1737,20 +1785,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                 aria-pressed={blueprintPanelOpen}
                 disabled={!anchor}
                 className={cn("text-zinc-950", blueprintPanelOpen && "ring-2 ring-primary")}
-                onClick={() => setBlueprintPanelOpen((open) => !open)}
+                onClick={() => {
+                  // 그리는 중에 배치도 패널을 열면 하단 카드가 둘이 된다. 그리기를 접고 연다.
+                  setDraftPoints([]);
+                  setDrawTool("select");
+                  setBlueprintPanelOpen((open) => !open);
+                }}
               />
             </span>
           ) : null}
-          <span title={editLockReason ?? "라인 그리기 — 지도를 눌러 꺾은점을 찍습니다"}>
-            <IconButton
-              icon={<RulerHorizontalIcon className="size-5" />}
-              aria-label="라인 추가"
-              aria-pressed={drawTool === "line"}
-              disabled={editingLocked}
-              className={cn("text-zinc-950", drawTool === "line" && "ring-2 ring-primary")}
-              onClick={() => startShapeTool("line")}
-            />
-          </span>
         </div>
         <MapZoomControls
           onZoomIn={() => setZoomStep((step) => Math.max(step - 1, -2))}
@@ -1758,120 +1801,150 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         />
       </div>
 
-      {blueprintPanelOpen && anchor && drawTool === "select" ? (
-        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex w-[min(92vw,860px)] -translate-x-1/2 flex-wrap items-end gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
-          <div className="flex flex-col gap-1">
-            <p className="body-small-bold text-zinc-950">배치도 맞추기</p>
-            <p className="body-caption text-zinc-500">이미지를 끌어 위치를 맞추세요</p>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="body-caption text-zinc-500">가로 실거리(m)</span>
-            <input
-              type="number"
-              min={1}
-              max={100000}
-              step={10}
-              value={Math.round(anchor.groundWidthMeters)}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (!Number.isFinite(next) || next <= 0) return;
-                setAnchor((current) =>
-                  current ? { ...current, groundWidthMeters: Math.min(next, 100000) } : current,
-                );
-              }}
-              className="body-small w-28 rounded-md border border-zinc-200 px-2 py-1.5 text-zinc-950"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="body-caption text-zinc-500">회전(도)</span>
-            <input
-              type="number"
-              min={-360}
-              max={360}
-              step={1}
-              value={Math.round(anchor.rotationDegrees)}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (!Number.isFinite(next)) return;
-                setAnchor((current) =>
-                  current
-                    ? { ...current, rotationDegrees: Math.max(Math.min(next, 360), -360) }
-                    : current,
-                );
-              }}
-              className="body-small w-24 rounded-md border border-zinc-200 px-2 py-1.5 text-zinc-950"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="body-caption text-zinc-500">투명도</span>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              step={5}
-              value={Math.round(blueprintOpacity * 100)}
-              onChange={(event) => setBlueprintOpacity(Number(event.target.value) / 100)}
-              className="w-32"
-            />
-          </label>
-          <label className="body-small flex items-center gap-2 text-zinc-950">
-            <Checkbox
-              checked={blueprintVisible}
-              onCheckedChange={(checked) => setBlueprintVisible(checked === true)}
-            />
-            배치도 보기
-          </label>
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!anchorDirty || anchorMutation.isPending}
-              onClick={() => setAnchor(serverAnchor)}
-            >
-              되돌리기
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!anchorDirty || anchorMutation.isPending || editingLocked}
-              title={editLockReason ?? undefined}
-              onClick={() => anchorMutation.mutate()}
-            >
-              {anchorMutation.isPending ? "저장 중..." : "배치도 위치 저장"}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      {/*
+        하단 카드는 좌측 부스 목록(left-8 + w-72)과 우측 도구 열(right-8) 사이에만 놓는다.
+        가운데 정렬로 두면 좁은 화면에서 두 패널을 그대로 덮어 버린다.
+      */}
+      <div className="pointer-events-none absolute right-16 bottom-4 left-4 flex flex-col items-stretch gap-2 lg:right-28 lg:bottom-10 lg:left-[21.5rem]">
+        {blueprintPanelOpen && anchor ? (
+          <div className="pointer-events-auto flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-md">
+            <div className="min-w-0">
+              <p className="body-small-bold text-zinc-950">배치도 맞추기</p>
+              <p className="body-caption text-zinc-500">이미지를 끌어 위치를 맞추세요</p>
+            </div>
 
-      {drawTool === "polygon" || drawTool === "line" ? (
-        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
-          <p className="body-small text-zinc-950">
-            지도를 눌러 {SHAPE_LABEL[drawTool]} 꼭짓점을 찍으세요
-            <span className="body-small-bold ml-2 text-primary">
-              {draftPoints.length}개 / 최소 {SHAPE_MINIMUM_POINTS[drawTool]}개
+            <label className="flex flex-col gap-1">
+              <span className="body-caption whitespace-nowrap text-zinc-500">가로 실거리(m)</span>
+              <input
+                type="number"
+                min={1}
+                max={100000}
+                step={10}
+                value={Math.round(anchor.groundWidthMeters)}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (!Number.isFinite(next) || next <= 0) return;
+                  setAnchor((current) =>
+                    current ? { ...current, groundWidthMeters: Math.min(next, 100000) } : current,
+                  );
+                }}
+                className={BLUEPRINT_INPUT_CLASSES}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="body-caption whitespace-nowrap text-zinc-500">회전(도)</span>
+              <input
+                type="number"
+                min={-360}
+                max={360}
+                step={1}
+                value={Math.round(anchor.rotationDegrees)}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (!Number.isFinite(next)) return;
+                  setAnchor((current) =>
+                    current
+                      ? { ...current, rotationDegrees: Math.max(Math.min(next, 360), -360) }
+                      : current,
+                  );
+                }}
+                className={BLUEPRINT_INPUT_CLASSES}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="body-caption whitespace-nowrap text-zinc-500">
+                투명도 {Math.round(blueprintOpacity * 100)}%
+              </span>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                step={5}
+                value={Math.round(blueprintOpacity * 100)}
+                onChange={(event) => setBlueprintOpacity(Number(event.target.value) / 100)}
+                className="h-9 w-28 accent-primary"
+              />
+            </label>
+
+            <label className="body-small flex items-center gap-2 whitespace-nowrap text-zinc-950">
+              <Checkbox
+                checked={blueprintVisible}
+                onCheckedChange={(checked) => setBlueprintVisible(checked === true)}
+              />
+              배치도 보기
+            </label>
+
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!anchorDirty || anchorMutation.isPending}
+                onClick={() => setAnchor(serverAnchor)}
+              >
+                되돌리기
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={!anchorDirty || anchorMutation.isPending || editingLocked}
+                title={editLockReason ?? undefined}
+                onClick={() => anchorMutation.mutate()}
+              >
+                {anchorMutation.isPending ? "저장 중..." : "위치 저장"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {drawTool === "polygon" || drawTool === "line" ? (
+          <div className="pointer-events-auto flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-md">
+            <div className="min-w-0">
+              <p className="body-small-bold text-zinc-950">{SHAPE_LABEL[drawTool]} 그리기</p>
+              <p className="body-caption text-zinc-500">
+                지도를 눌러 꼭짓점을 찍으세요 (Enter 완료 · Esc 그만두기)
+              </p>
+            </div>
+
+            <span className="body-caption shrink-0 rounded-full bg-zinc-100 px-3 py-1.5 whitespace-nowrap text-zinc-950">
+              꼭짓점{" "}
+              <span
+                className={
+                  draftPoints.length >= SHAPE_MINIMUM_POINTS[drawTool]
+                    ? "body-small-bold text-primary"
+                    : "body-small-bold text-zinc-500"
+                }
+              >
+                {draftPoints.length}
+              </span>{" "}
+              / 최소 {SHAPE_MINIMUM_POINTS[drawTool]}개
             </span>
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={draftPoints.length === 0}
-            onClick={undoDraftPoint}
-          >
-            한 점 취소
-          </Button>
-          <Button type="button" variant="outline" onClick={cancelDraftShape}>
-            그만두기
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={draftPoints.length < SHAPE_MINIMUM_POINTS[drawTool]}
-            onClick={finishDraftShape}
-          >
-            그리기 완료
-          </Button>
-        </div>
-      ) : null}
+
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={draftPoints.length === 0}
+                onClick={undoDraftPoint}
+              >
+                한 점 취소
+              </Button>
+              <Button type="button" variant="outline" onClick={cancelDraftShape}>
+                그만두기
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={draftPoints.length < SHAPE_MINIMUM_POINTS[drawTool]}
+                onClick={finishDraftShape}
+              >
+                그리기 완료
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <ConfirmDialog
         open={saveDialogOpen}
