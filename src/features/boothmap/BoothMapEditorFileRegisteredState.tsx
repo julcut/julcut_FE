@@ -262,6 +262,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [removePamphletOpen, setRemovePamphletOpen] = useState(false);
   const [clearQueuePathOpen, setClearQueuePathOpen] = useState(false);
+  const [queueImportOpen, setQueueImportOpen] = useState(false);
   /*
     분석 안내를 닫아 둔 작업 키. 새 분석이 시작되거나 상태가 바뀌면 다시 띄운다 —
     한 번 닫았다고 다음 결과까지 숨기면 무엇이 끝났는지 알 수 없다.
@@ -1126,6 +1127,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       toast.error(message);
     },
   });
+
+  /**
+   * 지도에 그려 둔 라인 도형을 운영 대기줄 경로로 가져온다.
+   *
+   * 지도 노드(QUEUE·통로 등)와 운영 대기줄은 다른 데이터라 자동으로 옮기지 않는다.
+   * 부스를 고르고 이 버튼을 눌러야만 초안으로 들어오고, 저장은 따로 눌러야 한다.
+   */
+  function importQueueDraftFrom(shape: LocalMapShape) {
+    setQueueDraft(shape.points.map((point) => ({ lat: point.lat, lng: point.lng })));
+    setQueueImportOpen(false);
+    toast.info(`${shape.name}을(를) 대기줄 초안으로 가져왔습니다.`, {
+      description: "위치를 확인한 뒤 «대기줄 저장»을 눌러 주세요.",
+    });
+  }
 
   /** 끌고 있는 꼭짓점은 아직 shapes에 반영되지 않았으므로 임시 좌표를 끼워 넣는다. */
   function shapePointsOf(shape: LocalMapShape) {
@@ -2600,6 +2615,38 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             >
               경로 지우기
             </Button>
+          ) : null}
+          {/*
+            지도에 그려 둔 라인(통로·대기 라인)을 초안으로 옮긴다. 자동으로 승격하지
+            않는 이유는 지도 노드와 운영 대기줄이 다른 데이터이기 때문이다.
+          */}
+          {lineShapes.length > 0 ? (
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setQueueImportOpen((open) => !open)}
+              >
+                참고선 가져오기
+              </Button>
+              {queueImportOpen ? (
+                <div className="absolute bottom-full left-0 z-10 mb-2 w-56 rounded-lg border border-zinc-200 bg-white p-2 shadow-md">
+                  {lineShapes.map((shape) => (
+                    <button
+                      key={shape.id}
+                      type="button"
+                      onClick={() => importQueueDraftFrom(shape)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-zinc-100"
+                    >
+                      <span className="body-small truncate text-zinc-950">{shape.name}</span>
+                      <span className="body-caption ml-auto shrink-0 text-zinc-500">
+                        점 {shape.points.length}개
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {queueSaveError ? <p className="body-caption text-error">{queueSaveError}</p> : null}
         </div>
