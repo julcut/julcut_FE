@@ -436,8 +436,21 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     [selectedZone, booths],
   );
 
-  const selectedLatitude = selectedBooth?.lat;
-  const selectedLongitude = selectedBooth?.lng;
+  const selectedShape = useMemo(
+    () => shapes.find((shape) => shape.id === selectedShapeId) ?? null,
+    [shapes, selectedShapeId],
+  );
+  /*
+    말풍선은 고른 대상 위에 뜬다. 부스뿐 아니라 도형(구역·통로)을 골랐을 때도 같은 자리로
+    맞춰야 상단 버튼 줄에 가리지 않는다. 도형은 무게중심을 기준점으로 쓴다.
+  */
+  const selectedFocus = useMemo(() => {
+    if (selectedBooth) return { lat: selectedBooth.lat, lng: selectedBooth.lng };
+    if (selectedShape) return shapeAnchor(selectedShape);
+    return null;
+  }, [selectedBooth, selectedShape]);
+  const selectedLatitude = selectedFocus?.lat;
+  const selectedLongitude = selectedFocus?.lng;
   useEffect(() => {
     const wrapper = mapWrapperRef.current;
     if (selectedLatitude == null || selectedLongitude == null || !kakaoMap || !wrapper) return;
@@ -451,13 +464,23 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       const left = list?.width ? Math.max(0, list.right - bounds.left) : 0;
       const right = tools?.width ? Math.min(bounds.width, tools.left - bounds.left) : bounds.width;
       const targetX = (left + right) / 2;
+      /*
+        말풍선(높이 약 200px)이 대상 위쪽에 뜨므로, 화면이 낮으면 세로 가운데에 둬도
+        상단 버튼 줄 밑으로 파고든다. 버튼 줄 아래에 말풍선이 들어갈 만큼은 내린다.
+      */
+      const popoverRoom = 200;
+      const topBarBottom = 96;
+      const targetY = Math.max(bounds.height / 2, topBarBottom + popoverRoom);
       const projection = kakaoMap.getProjection();
       const point = projection.containerPointFromCoords(
         new window.kakao.maps.LatLng(selectedLatitude!, selectedLongitude!),
       );
       kakaoMap.panTo(
         projection.coordsFromContainerPoint(
-          new window.kakao.maps.Point(point.x + bounds.width / 2 - targetX, point.y),
+          new window.kakao.maps.Point(
+            point.x + bounds.width / 2 - targetX,
+            point.y + bounds.height / 2 - targetY,
+          ),
         ),
       );
     }
@@ -467,7 +490,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     observer.observe(wrapper);
     if (boothListRef.current) observer.observe(boothListRef.current);
     return () => observer.disconnect();
-  }, [selectedId, selectedLatitude, selectedLongitude, kakaoMap, boothListOpen]);
+  }, [selectedId, selectedShapeId, selectedLatitude, selectedLongitude, kakaoMap, boothListOpen]);
 
   // 서버 데이터를 새로 받을 때마다(최초 진입, AI 분석 완료 등) 부스 전체가 보이도록
   // 한 번 맞춘다. 그 뒤로는 사용자가 옮기고 확대한 위치를 존중한다.
@@ -479,10 +502,6 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const pendingGroupMembers = useMemo(
     () => (groupPopoverOpen ? booths.filter((booth) => checkedIds.has(booth.id)) : []),
     [booths, checkedIds, groupPopoverOpen],
-  );
-  const selectedShape = useMemo(
-    () => shapes.find((shape) => shape.id === selectedShapeId) ?? null,
-    [shapes, selectedShapeId],
   );
   const mapCenter = editorQuery.data?.center ?? mapQuery.data?.center ?? festivalCenter;
 
