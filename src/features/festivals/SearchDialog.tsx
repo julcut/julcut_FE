@@ -36,6 +36,10 @@ export interface SearchDialogProps {
   /** "none"/"result" 상태에서만 노출되는 폴백 버튼 — 검색으로 못 찾은 값을 직접 쓴다. */
   onManualInput: (value: string) => void;
   manualInputLabel?: string;
+  /** 직접 입력한 값을 후처리하는 동안(예: 주소 → 좌표 변환) 버튼을 잠근다. */
+  manualInputPending?: boolean;
+  /** 직접 입력한 값을 쓸 수 없을 때 버튼 아래 뜨는 사유. */
+  manualInputError?: string | null;
 }
 
 /** 축제 검색/주소 찾기처럼 "제목 + 검색창 + 결과 목록" 구조를 공유하는 모달. */
@@ -55,6 +59,8 @@ export function SearchDialog({
   noResultSubtext,
   onManualInput,
   manualInputLabel = "직접 입력",
+  manualInputPending = false,
+  manualInputError = null,
 }: SearchDialogProps) {
   const [value, setValue] = useState("");
 
@@ -142,14 +148,20 @@ export function SearchDialog({
             ) : null}
 
             {state !== "default" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-2 self-start"
-                onClick={() => onManualInput(value.trim())}
-              >
-                {manualInputLabel}
-              </Button>
+              <div className="mt-2 flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="self-start"
+                  disabled={manualInputPending}
+                  onClick={() => onManualInput(value.trim())}
+                >
+                  {manualInputLabel}
+                </Button>
+                {manualInputError ? (
+                  <p className="body-small text-error">{manualInputError}</p>
+                ) : null}
+              </div>
             ) : null}
           </form>
         </Dialog.Content>
