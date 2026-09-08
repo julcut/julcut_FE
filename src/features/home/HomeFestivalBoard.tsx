@@ -12,6 +12,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { formatDday } from "@/features/festivals/dateFormat";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { getManagedFestivals } from "./api";
 import type { FestivalProgressStatus, FestivalSummary } from "./types";
@@ -41,27 +42,19 @@ const STATUS_BODY_BORDER_STYLES: Record<FestivalProgressStatus, string> = {
   COMPLETED: "divide-secondary-600 border-secondary-600",
 };
 
+/** 컬럼이 비었을 때 헤더 아래에 남는 빈 공백 대신 보여줄 안내 문구. */
+const STATUS_EMPTY_MESSAGE: Record<FestivalProgressStatus, string> = {
+  UPCOMING: "예정된 축제가 없습니다",
+  ONGOING: "진행중인 축제가 없습니다",
+  COMPLETED: "종료된 축제가 없습니다",
+};
+
 function formatFestivalDateRange(startDate: string, endDate: string) {
   const format = (date: string) => {
     const [year, month, day] = date.split("-").map(Number);
     return `${year}년 ${month}월 ${day}일`;
   };
   return `${format(startDate)} - ${format(endDate)}`;
-}
-
-/** 오늘부터 축제 시작일까지 남은 일수. 자정 기준 캘린더 일수 차이로 계산한다. */
-function calculateDday(startDate: string) {
-  const [year, month, day] = startDate.split("-").map(Number);
-  const start = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffMs = start.getTime() - today.getTime();
-  return Math.round(diffMs / (1000 * 60 * 60 * 24));
-}
-
-function formatDday(startDate: string) {
-  const dday = calculateDday(startDate);
-  return dday === 0 ? "D-DAY" : dday > 0 ? `D-${dday}` : `D+${Math.abs(dday)}`;
 }
 
 /** 역할에 따라 축제 카드 클릭 시 이동할 경로. 총괄관리자는 축제관리, 운영자는 대시보드로 간다. */
@@ -119,7 +112,7 @@ function StatusColumn({
         <p>{STATUS_LABEL[status]}</p>
         <p>{festivals.length}</p>
       </div>
-      {festivals.length > 0 && (
+      {festivals.length > 0 ? (
         <div
           className={`flex flex-col divide-y overflow-hidden rounded-lg border ${STATUS_BODY_BORDER_STYLES[status]}`}
         >
@@ -127,6 +120,14 @@ function StatusColumn({
             <FestivalCard key={festival.festivalId} festival={festival} />
           ))}
         </div>
+      ) : (
+        <Empty className="min-h-[96px] rounded-lg border border-dashed border-zinc-200 p-5">
+          <EmptyHeader>
+            <EmptyDescription className="body-small text-zinc-500">
+              {STATUS_EMPTY_MESSAGE[status]}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
     </div>
   );
