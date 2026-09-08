@@ -24,8 +24,18 @@ describe("cornersFromAnchor", () => {
   it("90도 회전 후에도 네 귀퉁이가 서로 다른 위치를 유지한다", () => {
     const corners = cornersFromAnchor({ ...anchor, rotationDegrees: 90 }, 200, 100);
     assert.ok(corners);
-    const lats = [corners.topLeft.lat, corners.topRight.lat, corners.bottomRight.lat, corners.bottomLeft.lat];
-    const lngs = [corners.topLeft.lng, corners.topRight.lng, corners.bottomRight.lng, corners.bottomLeft.lng];
+    const lats = [
+      corners.topLeft.lat,
+      corners.topRight.lat,
+      corners.bottomRight.lat,
+      corners.bottomLeft.lat,
+    ];
+    const lngs = [
+      corners.topLeft.lng,
+      corners.topRight.lng,
+      corners.bottomRight.lng,
+      corners.bottomLeft.lng,
+    ];
     assert.equal(new Set(lats.map((value) => value.toFixed(7))).size > 1, true);
     assert.equal(new Set(lngs.map((value) => value.toFixed(7))).size > 1, true);
   });
