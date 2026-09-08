@@ -1698,7 +1698,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
 
       <MapAnalysisProgressCard
         analysis={analysis}
-        className="absolute top-28 left-1/2 z-20 -translate-x-1/2 lg:top-10"
+        /*
+          상단 버튼 줄(다시 분석·팜플렛 올리기·저장하기)이 오른쪽 위를 쓰므로 그 아래로
+          내린다. lg:top-10으로 두면 버튼과 같은 높이라 카드가 버튼을 덮는다.
+        */
+        className="absolute top-28 left-1/2 z-20 -translate-x-1/2 lg:top-28"
       />
 
       <Button
@@ -2008,7 +2012,6 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             />
           </span>
         </div>
-        <p className="body-caption max-w-40 text-center text-zinc-950">Ctrl/⌘ 드래그: 지도 이동</p>
         <MapZoomControls
           onZoomIn={() => setZoomStep((step) => Math.max(step - 1, -2))}
           onZoomOut={() => setZoomStep((step) => Math.min(step + 1, 4))}
@@ -2016,7 +2019,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       </div>
 
       {drawTool === "polygon" || drawTool === "line" ? (
-        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
+        <div className="pointer-events-auto absolute right-16 bottom-4 left-4 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:right-28 lg:bottom-10 lg:left-[23rem]">
           <p className="body-small text-zinc-950">
             지도를 눌러 {SHAPE_LABEL[drawTool]} 꼭짓점을 찍으세요
             <span className="body-small-bold ml-2 text-primary">
@@ -2046,7 +2049,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       ) : null}
 
       {drawTool === "boundary" ? (
-        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:bottom-10">
+        <div className="pointer-events-auto absolute right-16 bottom-4 left-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:right-28 lg:bottom-10 lg:left-[23rem]">
           <Button type="button" variant="outline" onClick={cancelDraftShape}>
             취소
           </Button>
@@ -2062,7 +2065,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       ) : null}
 
       {drawTool === "queue-line" ? (
-        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:bottom-10">
+        <div className="pointer-events-auto absolute right-16 bottom-4 left-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:right-28 lg:bottom-10 lg:left-[23rem]">
           <Button type="button" variant="outline" onClick={cancelDraftShape}>
             취소
           </Button>
