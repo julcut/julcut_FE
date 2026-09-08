@@ -96,3 +96,25 @@ export function isNearPoint(target: LatLng, candidate: LatLng, degrees = 0.00008
     Math.abs(target.lng - candidate.lng) <= degrees
   );
 }
+
+/**
+ * 점이 폴리곤 안에 있는지(ray casting).
+ *
+ * 화면설계서 4-6의 "상위구역"을 판정하는 데 쓴다. 구역과 부스를 잇는 별도 필드를
+ * 두지 않고 좌표로 판정하므로, 저장했다 다시 불러와도 소속이 그대로 살아난다.
+ * 경계선 위의 점은 안쪽으로 본다.
+ */
+export function containsPoint(polygon: LatLng[], point: LatLng): boolean {
+  const ring = withoutClosingDuplicate(polygon);
+  if (ring.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    const straddles = a.lat > point.lat !== b.lat > point.lat;
+    if (!straddles) continue;
+    const crossLng = ((b.lng - a.lng) * (point.lat - a.lat)) / (b.lat - a.lat) + a.lng;
+    if (point.lng < crossLng) inside = !inside;
+  }
+  return inside;
+}

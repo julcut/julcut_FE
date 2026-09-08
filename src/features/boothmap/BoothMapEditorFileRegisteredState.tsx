@@ -55,7 +55,12 @@ import {
 } from "./mapPresentation";
 import { cornersFromAnchor } from "./overlayProjection";
 import { PamphletOverlay } from "./PamphletOverlay";
-import { uniqueVertices, validateBoundary, withoutClosingDuplicate } from "./polygonGeometry";
+import {
+  containsPoint,
+  uniqueVertices,
+  validateBoundary,
+  withoutClosingDuplicate,
+} from "./polygonGeometry";
 import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons";
@@ -350,9 +355,25 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     zones.forEach((zone) => zone.boothIds.forEach((id) => map.set(id, zone.id)));
     return map;
   }, [zones]);
+  /*
+    화면설계서 4-6의 "상위구역". 구역 폴리곤 안에 들어온 부스를 그 구역의 하위로 본다.
+    구역과 부스를 잇는 필드를 따로 두지 않고 좌표로 판정하므로, 저장했다 다시 불러와도
+    소속이 그대로 살아난다.
+  */
+  const polygonShapes = useMemo(() => shapes.filter((shape) => shape.kind === "polygon"), [shapes]);
+  const lineShapes = useMemo(() => shapes.filter((shape) => shape.kind === "line"), [shapes]);
+  const shapeIdByBoothId = useMemo(() => {
+    const map = new Map<string, string>();
+    booths.forEach((booth) => {
+      const owner = polygonShapes.find((shape) => containsPoint(shape.points, booth));
+      if (owner) map.set(booth.id, owner.id);
+    });
+    return map;
+  }, [booths, polygonShapes]);
   const ungroupedBooths = useMemo(
-    () => booths.filter((booth) => !zoneIdByBoothId.has(booth.id)),
-    [booths, zoneIdByBoothId],
+    () =>
+      booths.filter((booth) => !zoneIdByBoothId.has(booth.id) && !shapeIdByBoothId.has(booth.id)),
+    [booths, zoneIdByBoothId, shapeIdByBoothId],
   );
   // 그룹(구역)에 속한 부스 핀은 그 구역이 선택됐을 때만 지도에 노출한다 —
   // "4-4. 축제부스지도 - 아무것도 선택하지 않은 경우" 화면설계서 기준(최상위구역 폴리곤만 노출).
@@ -394,6 +415,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         : null,
     [selectedBooth, zones],
   );
+  /*
+    말풍선의 "상위구역". 구역 폴리곤 안에 있으면 그 구역 이름을, 아니면 묶어 둔
+    그룹 이름을 쓴다. 둘 다 없으면 설계서 모달처럼 "-"로 남긴다.
+  */
+  const selectedBoothParentName = useMemo(() => {
+    if (!selectedBooth) return "-";
+    const owner = polygonShapes.find(
+      (shape) => shape.id === shapeIdByBoothId.get(selectedBooth.id),
+    );
+    return owner?.name ?? selectedBoothZone?.name ?? "-";
+  }, [selectedBooth, polygonShapes, shapeIdByBoothId, selectedBoothZone]);
   const selectedZone = useMemo(
     () => zones.find((zone) => zone.id === selectedZoneId) ?? null,
     [zones, selectedZoneId],
@@ -759,6 +791,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   }, [hasUnsavedChanges]);
 
   function addBoothAt(lat: number, lng: number) {
+    /*
+      화면설계서 4-6은 상위구역을 고른 뒤 그 구역 폴리곤 안에 부스를 찍게 한다.
+      밖에 찍었다고 막지는 않되(지도를 옮겨 가며 찍는 흐름을 끊는다), 어느 구역에도
+      들어가지 않았다는 것은 알려 준다.
+    */
+    if (selectedShape?.kind === "polygon" && !containsPoint(selectedShape.points, { lat, lng })) {
+      toast.info(`${selectedShape.name} 밖에 찍었습니다.`, {
+        description: "구역 안에 찍으면 그 구역의 부스로 묶입니다.",
+      });
+    }
     const id = crypto.randomUUID();
     setBooths((prev) => [
       ...prev,
@@ -1911,7 +1953,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                   style={{ position: "static" }}
                   initialName={selectedBooth.name}
                   typeLabel={NODE_TYPE_LABEL[selectedBooth.nodeType] ?? "시설"}
-                  parentZoneName={selectedBoothZone?.name ?? ""}
+                  parentZoneName={selectedBoothParentName}
                   confirmLabel={selectedBooth.isNew ? "등록" : "수정"}
                   hideCancel
                   onChangeNodeType={(nodeType) => changePinNodeType(selectedBooth, nodeType)}
@@ -2160,13 +2202,45 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             {ungroupedBooths.map((booth) => renderBoothRow(booth, { indent: false }))}
           </div>
 
-          {/* 직접 그린 폴리곤·라인 — 부스 핀과 성격이 달라 구역 목록과 분리해 보여 준다. */}
-          {shapes.length > 0 ? (
+          {/* 구역 폴리곤은 그 안에 든 부스를 하위로 품는다(화면설계서 4-6). */}
+          {polygonShapes.length > 0 ? (
+            <div className="flex flex-col gap-1 border-t border-zinc-200 pt-3">
+              {polygonShapes.map((shape) => {
+                const members = booths.filter(
+                  (booth) => shapeIdByBoothId.get(booth.id) === shape.id,
+                );
+                return (
+                  <ZoneListItem
+                    key={shape.id}
+                    name={shape.name}
+                    count={members.length}
+                    expanded={expandedZoneIds.has(shape.id)}
+                    checked={selectedShapeId === shape.id}
+                    selected={selectedShapeId === shape.id}
+                    onToggleExpanded={() => toggleZoneExpanded(shape.id)}
+                    onCheckedChange={(checked) => {
+                      setEditingBoothId(null);
+                      setSelectedShapeId(checked ? shape.id : null);
+                    }}
+                    onSelect={() => {
+                      setEditingBoothId(null);
+                      setSelectedShapeId(shape.id);
+                    }}
+                  >
+                    {members.map((booth) => renderBoothRow(booth, { indent: true }))}
+                  </ZoneListItem>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* 라인은 부스를 품지 않으므로 따로 나열한다. */}
+          {lineShapes.length > 0 ? (
             <div className="flex flex-col gap-1 border-t border-zinc-200 pt-3">
               <p className="body-small-bold text-zinc-950">
-                도형 <span className="text-primary">{shapes.length}</span>
+                도형 <span className="text-primary">{lineShapes.length}</span>
               </p>
-              {shapes.map((shape) => (
+              {lineShapes.map((shape) => (
                 <button
                   key={shape.id}
                   type="button"
