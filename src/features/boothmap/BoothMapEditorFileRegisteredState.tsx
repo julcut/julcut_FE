@@ -1501,20 +1501,35 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                     )}
                   >
                     {/*
-                      유형별 아이콘으로 부스·화장실·입구·출구를 지도에서 바로 구분한다.
-                      AI가 찾아 검수가 필요한 핀은 색으로 계속 구분한다(주황).
+                      부스는 지도에 가장 많이 찍히는 유형이라 원래대로 점으로 둔다.
+                      화장실·입구·출구·시설만 아이콘으로 구분한다 — 부스와 섞였을 때
+                      무엇인지 알 수 없던 것이 문제였지 부스 자체는 아니었다.
+                      AI가 찾아 검수가 필요한 핀은 유형과 상관없이 색으로 구분한다.
                     */}
-                    <span
-                      className={cn(
-                        "relative flex size-5 items-center justify-center rounded-full border shadow-sm [&_svg]:size-3",
-                        booth.uncertain
-                          ? "border-white bg-secondary-600 text-white"
-                          : "border-white bg-point-600 text-white",
-                        isSelected && "ring-2 ring-point-600/40",
-                      )}
-                    >
-                      {nodeTypeIcon(booth.nodeType)}
-                    </span>
+                    {booth.nodeType === "BOOTH" ? (
+                      <>
+                        {isSelected ? (
+                          <span className="absolute size-3 rounded-full bg-point-600/25" />
+                        ) : null}
+                        <span
+                          className={cn(
+                            "relative rounded-full",
+                            isSelected ? "size-1" : "size-3 shadow-sm",
+                            booth.uncertain ? "bg-secondary-600" : "bg-point-600",
+                          )}
+                        />
+                      </>
+                    ) : (
+                      <span
+                        className={cn(
+                          "relative flex size-5 items-center justify-center rounded-full border border-white text-white shadow-sm [&_svg]:size-3",
+                          booth.uncertain ? "bg-secondary-600" : "bg-point-600",
+                          isSelected && "ring-2 ring-point-600/40",
+                        )}
+                      >
+                        {nodeTypeIcon(booth.nodeType)}
+                      </span>
+                    )}
                   </button>
                 </CustomOverlayMap>
               );
