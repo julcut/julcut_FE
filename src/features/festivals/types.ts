@@ -116,6 +116,10 @@ export interface ManagedFestivalDetail {
   locations: FestivalLocationResponse[];
 }
 
+/**
+ * 축제 기본 정보 수정 요청. `locations`는 전체 치환이므로 항상 전체 목록을 보내야 한다.
+ * 방문 인원 집계 방식은 여기서 바꾸지 않고 `updateFestivalVisitorCountInputMode`를 쓴다.
+ */
 export interface UpdateFestivalRequest extends Omit<
   CreateFestivalRequest,
   "seriesId" | "visitorCountInputMode" | "operationStartTime" | "operationEndTime"
@@ -123,8 +127,12 @@ export interface UpdateFestivalRequest extends Omit<
   /** 두 시간 모두 생략하면 기존 운영시간을 유지한다. */
   operationStartTime?: string;
   operationEndTime?: string;
-  /** 생략하면 기존 방문객 집계 방식을 유지한다. */
-  visitorCountInputMode?: FestivalVisitorCountInputMode;
+}
+
+/** 방문 인원 집계 방식 전용 변경 API의 응답. */
+export interface FestivalVisitorCountInputModeResponse {
+  festivalId: string;
+  visitorCountInputMode: FestivalVisitorCountInputMode;
 }
 
 /** "축제 등록" 화면에서 축제명으로 기존 축제 시리즈를 검색한 결과 한 건. */
