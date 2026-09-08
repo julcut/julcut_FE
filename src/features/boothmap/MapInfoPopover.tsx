@@ -3,12 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Cross1Icon,
-  Crosshair2Icon,
-  CornersIcon,
   DimensionsIcon,
-  FaceIcon,
-  GridIcon,
-  HomeIcon,
   Pencil2Icon,
   RadiobuttonIcon,
   RulerHorizontalIcon,
@@ -19,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { MapOverlayCard } from "@/components/map/MapOverlayCard";
 import type { NodeType } from "./types";
+import { LINE_TYPE_OPTIONS, PIN_TYPE_OPTIONS, POLYGON_TYPE_OPTIONS } from "./nodeTypeIcons";
 
 export type MapInfoPopoverMode = "group-create" | "zone-edit" | "booth-edit";
 export type MapObjectTypeCategory = "pin" | "polygon" | "line";
@@ -33,23 +29,6 @@ const TYPE_CATEGORY_OPTIONS: { value: MapObjectTypeCategory; label: string; icon
   { value: "pin", label: "핀", icon: <RadiobuttonIcon /> },
   { value: "polygon", label: "폴리곤", icon: <DimensionsIcon /> },
   { value: "line", label: "라인", icon: <RulerHorizontalIcon /> },
-];
-
-const PIN_TYPE_OPTIONS: { value: NodeType; label: string; icon: ReactNode }[] = [
-  { value: "OTHER", label: "시설", icon: <RadiobuttonIcon /> },
-  { value: "BOOTH", label: "부스", icon: <Crosshair2Icon /> },
-  { value: "ENTRANCE", label: "입구", icon: <HomeIcon /> },
-  { value: "EXIT", label: "출구", icon: <HomeIcon /> },
-  { value: "RESTROOM", label: "화장실", icon: <FaceIcon /> },
-];
-
-const POLYGON_TYPE_OPTIONS: { value: NodeType; label: string; icon: ReactNode }[] = [
-  { value: "OPEN_SPACE", label: "구역", icon: <CornersIcon /> },
-  { value: "PARKING", label: "주차장", icon: <GridIcon /> },
-];
-
-const LINE_TYPE_OPTIONS: { value: NodeType; label: string; icon: ReactNode }[] = [
-  { value: "PATH", label: "통로", icon: <RulerHorizontalIcon /> },
 ];
 
 /**
