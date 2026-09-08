@@ -1,5 +1,7 @@
 "use client";
 
+import { Cross2Icon } from "@radix-ui/react-icons";
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import type { MapAnalysisState } from "./useMapAnalysis";
 
@@ -85,9 +87,12 @@ const TONE_CLASS = {
 export function MapAnalysisProgressCard({
   analysis,
   className,
+  onDismiss,
 }: {
   analysis: MapAnalysisState;
   className?: string;
+  /** 전달하면 닫기 버튼을 붙인다. 결과를 확인한 뒤 지도를 가리지 않게 치울 수 있다. */
+  onDismiss?: () => void;
 }) {
   const notice = toNotice(analysis);
   if (!notice) return null;
@@ -97,7 +102,7 @@ export function MapAnalysisProgressCard({
       role="status"
       aria-live="polite"
       className={cn(
-        "w-80 rounded-lg border px-5 py-4 shadow-md",
+        "w-72 rounded-lg border px-5 py-4 shadow-md",
         TONE_CLASS[notice.tone],
         className,
       )}
@@ -106,7 +111,17 @@ export function MapAnalysisProgressCard({
         {notice.tone === "progress" ? (
           <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         ) : null}
-        <p className="body-small-bold text-zinc-950">{notice.title}</p>
+        <p className="body-small-bold flex-1 text-zinc-950">{notice.title}</p>
+        {onDismiss ? (
+          <IconButton
+            icon={<Cross2Icon className="size-4" />}
+            aria-label="분석 안내 닫기"
+            variant="ghost"
+            size="sm"
+            className="-mr-1 shrink-0 text-zinc-500"
+            onClick={onDismiss}
+          />
+        ) : null}
       </div>
       <p className="body-caption mt-1 text-zinc-500">{notice.description}</p>
     </div>

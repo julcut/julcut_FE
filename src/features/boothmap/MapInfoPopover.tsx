@@ -76,6 +76,12 @@ export function MapInfoPopover({
   const [typeCategory, setTypeCategory] = useState<MapObjectTypeCategory | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // 열리자마자 이름을 고칠 수 있게 커서를 넣고 기존 값을 모두 선택해 둔다.
+  useEffect(() => {
+    nameInputRef.current?.select();
+  }, []);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -106,10 +112,18 @@ export function MapInfoPopover({
           <span className="size-4 shrink-0 text-zinc-950 [&_svg]:size-4">
             <Pencil2Icon />
           </span>
+          {/*
+            테두리 없는 입력이라 제목처럼 보여, 고칠 수 있는 줄 모르고 "수정"만 눌렀다가
+            아무 일도 안 일어난다는 이야기가 반복됐다. 열릴 때 커서를 넣어 바로 고칠 수
+            있게 하고, 마우스를 올리면 입력칸 테두리를 보여 준다.
+          */}
           <input
+            ref={nameInputRef}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="body-large-bold min-w-0 flex-1 border-none p-0 text-zinc-950 outline-none"
+            placeholder="이름을 입력하세요"
+            aria-label="이름"
+            className="body-large-bold min-w-0 flex-1 rounded-md border border-transparent px-1 py-0.5 text-zinc-950 outline-none hover:border-zinc-200 focus:border-primary"
           />
           <IconButton
             variant="ghost"
