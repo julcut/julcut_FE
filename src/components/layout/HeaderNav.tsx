@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import type { AccountKind, AdminRole } from "@/features/auth/admin/types";
 import { Header } from "./Header";
 import { Nav, type NavItem } from "./Nav";
@@ -28,8 +31,34 @@ export function HeaderNav({
   accountKind,
   hideNav = false,
 }: HeaderNavProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  /*
+    모달 딤이 상단바를 덮지 않도록, 상단바의 실제 높이를 CSS 변수로 내보낸다.
+    네비 표시 여부와 좁은 화면의 줄바꿈까지 반영해야 해서 고정값 대신 측정한다.
+  */
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const applyHeight = () => {
+      document.documentElement.style.setProperty(
+        "--console-topbar-height",
+        `${element.getBoundingClientRect().height}px`,
+      );
+    };
+    applyHeight();
+
+    const observer = new ResizeObserver(applyHeight);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--console-topbar-height");
+    };
+  }, []);
+
   return (
-    <div className="flex min-w-0 shrink-0 flex-col">
+    <div ref={containerRef} className="flex min-w-0 shrink-0 flex-col">
       <Header
         variant="login"
         href="/console"

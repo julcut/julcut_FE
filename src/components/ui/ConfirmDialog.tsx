@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
+import { DIALOG_OVERLAY_CLASSES } from "./dialogOverlay";
 import { Button, type ButtonVariant } from "./Button";
 
 export interface ConfirmDialogProps {
@@ -41,9 +42,7 @@ export function ConfirmDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay
-          className={cn("fixed inset-x-0 top-[118px] bottom-0 z-30 bg-dimmed", overlayClassName)}
-        />
+        <Dialog.Overlay className={cn(DIALOG_OVERLAY_CLASSES, overlayClassName)} />
         <Dialog.Content
           className={cn(
             "fixed top-1/2 left-1/2 z-30 w-[480px] max-w-[calc(100vw-40px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-8",

@@ -3,6 +3,12 @@
 :root {
   --background: var(--color-zinc-50);
   --foreground: #171717;
+  /*
+    콘솔 상단바(헤더+네비)의 실제 높이. `HeaderNav`가 마운트되는 동안 자기 높이를
+    측정해 덮어쓴다. 모달 딤이 상단바를 가리지 않게 잡아 두는 값이라, 상단바가
+    없는 화면(스태프 앱·인증 화면)에서는 기본값 0으로 화면 전체를 덮는다.
+  */
+  --console-topbar-height: 0px;
 }
 
 @theme inline {
