@@ -69,6 +69,24 @@ export interface MapAnalysisStatusResponse {
   completedAt: string | null;
 }
 
+/**
+ * 배치도 이미지를 실세계 좌표에 고정하는 기준값.
+ * 이미지 중심 위경도 + 이미지 가로폭이 덮는 실거리(m) + 이미지 위쪽 방위각(북=0, 시계방향).
+ * 앵커가 없으면 응답에서 키 자체가 빠진다(백엔드가 NON_NULL 직렬화).
+ */
+export interface MapImageAnchor {
+  centerLat: number;
+  centerLng: number;
+  groundWidthMeters: number;
+  rotationDegrees: number;
+}
+
+export type UpdateMapImageAnchorRequest = MapImageAnchor;
+
+export interface UpdateMapImageAnchorResponse extends MapImageAnchor {
+  mapId: string;
+}
+
 export interface MapEditorResponse {
   mapId: string;
   displayImageUrl?: string | null;
@@ -81,6 +99,7 @@ export interface MapEditorResponse {
   nodes: NodeResponse[];
   zones?: RoadmapZoneResponse[];
   center?: { lat: number; lng: number } | null;
+  imageAnchor?: MapImageAnchor | null;
 }
 
 export interface CreateCoordinateMapResponse {

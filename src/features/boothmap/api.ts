@@ -10,6 +10,8 @@ import type {
   MapEditorResponse,
   SaveRoadmapDraftRequest,
   SaveRoadmapDraftResponse,
+  UpdateMapImageAnchorRequest,
+  UpdateMapImageAnchorResponse,
 } from "./types";
 
 export async function createCoordinateMap(
@@ -69,6 +71,19 @@ export async function saveMapEditor(
 ): Promise<SaveRoadmapDraftResponse> {
   const { data } = await adminApiClient.put<ApiResponse<SaveRoadmapDraftResponse>>(
     `/festivals/${festivalId}/maps/${mapId}/editor`,
+    request,
+  );
+  return data.data;
+}
+
+/** 배치도 이미지를 지도 위에 얹을 기준값(중심·가로 실거리·방위각)을 저장한다. */
+export async function updateMapImageAnchor(
+  festivalId: string,
+  mapId: string,
+  request: UpdateMapImageAnchorRequest,
+): Promise<UpdateMapImageAnchorResponse> {
+  const { data } = await adminApiClient.put<ApiResponse<UpdateMapImageAnchorResponse>>(
+    `/festivals/${festivalId}/maps/${mapId}/image-anchor`,
     request,
   );
   return data.data;

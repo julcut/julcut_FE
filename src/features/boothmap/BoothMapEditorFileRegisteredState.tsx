@@ -12,6 +12,7 @@ import {
   FileIcon,
   HamburgerMenuIcon,
   HomeIcon,
+  ImageIcon,
   RadiobuttonIcon,
   ResetIcon,
   RulerHorizontalIcon,
@@ -28,7 +29,13 @@ import { getManagedFestival } from "@/features/festivals/api";
 import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/httpError";
 import { useConsoleUiStore } from "@/store/consoleUiStore";
 import { cn } from "@/lib/utils";
-import { ensureCoordinateMap, getMapEditor, replaceFestivalMap, saveMapEditor } from "./api";
+import {
+  ensureCoordinateMap,
+  getMapEditor,
+  replaceFestivalMap,
+  saveMapEditor,
+  updateMapImageAnchor,
+} from "./api";
 import {
   boothIdsToNodeIds,
   boothMapPinsToNodeChanges,
@@ -42,7 +49,12 @@ import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
-import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
+import type {
+  CreateCoordinateMapResponse,
+  MapAnalysisStatusResponse,
+  MapImageAnchor,
+  NodeType,
+} from "./types";
 import { useEditHistory } from "./useEditHistory";
 import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
@@ -223,6 +235,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   /** 지금 찍고 있는 도형의 꼭짓점들. "그리기 완료"를 눌러야 shapes로 넘어간다. */
   const [draftPoints, setDraftPoints] = useState<{ lat: number; lng: number }[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  /*
+    배치도(팜플렛) 이미지를 지도 위에 얹는 기준값. 서버 값으로 시작해 화면에서 보정하고,
+    "배치도 맞춤"을 저장하면 PUT .../image-anchor로 올린다. 부스 노드 저장과는 별개 API다.
+  */
+  const [anchor, setAnchor] = useState<MapImageAnchor | null>(null);
+  const [blueprintPanelOpen, setBlueprintPanelOpen] = useState(false);
+  const [blueprintVisible, setBlueprintVisible] = useState(true);
+  const [blueprintOpacity, setBlueprintOpacity] = useState(0.6);
+  /** 지도 확대 배율이 바뀌면 이미지 픽셀 크기를 다시 계산해야 해서 올리는 값. */
+  const [projectionTick, setProjectionTick] = useState(0);
+  /** 지도 생성 직후 픽셀 계산을 한 번 깨우기 위한 표시. onCreate는 렌더마다 다시 불린다. */
+  const projectionSeededRef = useRef(false);
+  const blueprintHoveredRef = useRef(false);
+  const blueprintDraggingRef = useRef(false);
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [expandedZoneIds, setExpandedZoneIds] = useState<Set<string>>(new Set());
@@ -301,6 +327,40 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     () => (groupPopoverOpen ? booths.filter((booth) => checkedIds.has(booth.id)) : []),
     [booths, checkedIds, groupPopoverOpen],
   );
+  const bumpProjection = useCallback(() => setProjectionTick((tick) => tick + 1), []);
+  const serverAnchor = editorQuery.data?.imageAnchor ?? null;
+  const anchorDirty = useMemo(
+    () => JSON.stringify(anchor) !== JSON.stringify(serverAnchor),
+    [anchor, serverAnchor],
+  );
+  /*
+    이미지가 덮는 실거리(m)를 지금 배율의 화면 픽셀로 환산한다. 카카오맵에는 이미지를
+    지도에 붙이는 GroundOverlay가 없어 CustomOverlay + <img>로 흉내내야 하고, 그래서
+    확대할 때마다 크기를 다시 계산해 준다.
+  */
+  const blueprintSize = useMemo(() => {
+    void projectionTick;
+    const map = kakaoMapRef.current;
+    const imageWidth = editorQuery.data?.imageWidth ?? 0;
+    const imageHeight = editorQuery.data?.imageHeight ?? 0;
+    if (!map || !anchor || !window.kakao?.maps || imageWidth <= 0 || imageHeight <= 0) {
+      return null;
+    }
+    const metersPerDegreeLng = 111320 * Math.cos((anchor.centerLat * Math.PI) / 180);
+    if (metersPerDegreeLng <= 0) return null;
+    const halfDegree = anchor.groundWidthMeters / 2 / metersPerDegreeLng;
+    const projection = map.getProjection();
+    const left = projection.containerPointFromCoords(
+      new window.kakao.maps.LatLng(anchor.centerLat, anchor.centerLng - halfDegree),
+    );
+    const right = projection.containerPointFromCoords(
+      new window.kakao.maps.LatLng(anchor.centerLat, anchor.centerLng + halfDegree),
+    );
+    const width = Math.abs(right.x - left.x);
+    if (!Number.isFinite(width) || width <= 0) return null;
+    return { width, height: (width * imageHeight) / imageWidth };
+  }, [anchor, editorQuery.data?.imageWidth, editorQuery.data?.imageHeight, projectionTick]);
+
   const selectedShape = useMemo(
     () => shapes.find((shape) => shape.id === selectedShapeId) ?? null,
     [shapes, selectedShapeId],
@@ -387,6 +447,31 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       toast.error(getApiErrorMessage(error, "부스맵 저장에 실패했습니다."));
     },
   });
+  /*
+    배치도 기준값 저장. 부스 편집 저장(PUT .../editor)과 다른 API라 editRevision 낙관적 락과
+    무관하고, 저장해도 편집 중인 핀·도형은 그대로 남는다.
+  */
+  const anchorMutation = useMutation({
+    mutationFn: () => {
+      if (!mapQuery.data?.mapId || !anchor) throw new Error("배치도 정보를 불러오지 못했습니다.");
+      return updateMapImageAnchor(festivalId, mapQuery.data.mapId, anchor);
+    },
+    onSuccess: (saved) => {
+      // 서버가 자리수를 반올림해 돌려주므로 그 값을 화면 기준으로 삼는다.
+      setAnchor({
+        centerLat: saved.centerLat,
+        centerLng: saved.centerLng,
+        groundWidthMeters: saved.groundWidthMeters,
+        rotationDegrees: saved.rotationDegrees,
+      });
+      queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
+      toast.success("배치도 위치를 저장했습니다.");
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "배치도 위치를 저장하지 못했습니다."));
+    },
+  });
+
   const replaceMutation = useMutation({
     mutationFn: (file: File) => {
       if (!mapQuery.data?.mapId) throw new Error("지도 정보를 불러오지 못했습니다.");
@@ -475,6 +560,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     );
     setDraftPoints([]);
     setSelectedShapeId(null);
+    setAnchor(editorQuery.data.imageAnchor ?? null);
     setEditRevision(editorQuery.data.editRevision);
     setZones(
       (editorQuery.data.zones ?? []).map((zone) => ({
@@ -743,6 +829,52 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     window.addEventListener("pointercancel", handleUp);
   }
 
+  /** 배치도 이미지를 끌어 중심 위경도를 옮긴다. 핀 드래그와 같은 방식이다. */
+  function startBlueprintDrag(event: React.PointerEvent<HTMLElement>) {
+    if (!blueprintPanelOpen || editingLocked || !anchor || event.button !== 0) return;
+    const map = kakaoMapRef.current;
+    const wrapper = mapWrapperRef.current;
+    if (!map || !wrapper || !window.kakao?.maps) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    blueprintDraggingRef.current = true;
+    map.setDraggable(false);
+
+    const bounds = wrapper.getBoundingClientRect();
+    const projection = map.getProjection();
+    const startCoords = projection.containerPointFromCoords(
+      new window.kakao.maps.LatLng(anchor.centerLat, anchor.centerLng),
+    );
+    const grabX = event.clientX - bounds.left - startCoords.x;
+    const grabY = event.clientY - bounds.top - startCoords.y;
+
+    const moveTo = (clientX: number, clientY: number) => {
+      const coords = map
+        .getProjection()
+        .coordsFromContainerPoint(
+          new window.kakao.maps.Point(clientX - bounds.left - grabX, clientY - bounds.top - grabY),
+        );
+      setAnchor((current) =>
+        current ? { ...current, centerLat: coords.getLat(), centerLng: coords.getLng() } : current,
+      );
+    };
+
+    const handleMove = (moveEvent: PointerEvent) => moveTo(moveEvent.clientX, moveEvent.clientY);
+    const handleUp = (upEvent: PointerEvent) => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+      blueprintDraggingRef.current = false;
+      if (!blueprintHoveredRef.current) map.setDraggable(true);
+      moveTo(upEvent.clientX, upEvent.clientY);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+  }
+
   function toggleChecked(id: string) {
     setEditingBoothId(null);
     setCheckedIds((prev) => {
@@ -942,7 +1074,18 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               kakaoMapRef.current = map;
               map.setMinLevel(1);
               map.setMaxLevel(8);
+              /*
+                지도가 만들어진 뒤라야 projection으로 픽셀을 잴 수 있어 한 번 깨워 준다.
+                onCreate는 렌더마다 다시 불리므로 여기서 조건 없이 setState 하면
+                "Maximum update depth exceeded"로 화면이 통째로 죽는다.
+              */
+              if (!projectionSeededRef.current) {
+                projectionSeededRef.current = true;
+                bumpProjection();
+              }
             }}
+            onZoomChanged={bumpProjection}
+            onIdle={bumpProjection}
             onClick={(_target, mouseEvent) => {
               if (editingLocked) return;
               const latLng = mouseEvent.latLng;
@@ -956,6 +1099,54 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               }
             }}
           >
+            {/* 배치도(팜플렛) 이미지 — 부스 핀·도형보다 아래에 깔린다. */}
+            {anchor && blueprintVisible && blueprintSize && editorQuery.data?.displayImageUrl ? (
+              /*
+                크기가 바뀌어도 중심이 흔들리지 않게 0x0 컨테이너를 좌표에 딱 붙이고(xAnchor/yAnchor 0)
+                이미지를 절반씩 밀어 배치한다. 카카오 CustomOverlay는 콘텐츠 크기를 만들 때 한 번만
+                재서, 기본 중앙 정렬에 맡기면 폭을 줄일 때 이미지가 왼쪽 위로 쏠린다.
+              */
+              <CustomOverlayMap
+                position={{ lat: anchor.centerLat, lng: anchor.centerLng }}
+                xAnchor={0}
+                yAnchor={0}
+                zIndex={1}
+              >
+                <div className="relative size-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- S3 presigned URL이라 next/image 최적화 대상이 아니고, 픽셀 크기를 매 배율마다 직접 계산해 넣는다 */}
+                  <img
+                    src={editorQuery.data.displayImageUrl}
+                    alt="축제 배치도"
+                    draggable={false}
+                    onPointerEnter={() => {
+                      blueprintHoveredRef.current = true;
+                      if (blueprintPanelOpen && !editingLocked) {
+                        kakaoMapRef.current?.setDraggable(false);
+                      }
+                    }}
+                    onPointerLeave={() => {
+                      blueprintHoveredRef.current = false;
+                      if (!blueprintDraggingRef.current) kakaoMapRef.current?.setDraggable(true);
+                    }}
+                    onPointerDown={startBlueprintDrag}
+                    style={{
+                      left: `${-blueprintSize.width / 2}px`,
+                      top: `${-blueprintSize.height / 2}px`,
+                      width: `${blueprintSize.width}px`,
+                      height: `${blueprintSize.height}px`,
+                      transform: `rotate(${anchor.rotationDegrees}deg)`,
+                      opacity: blueprintOpacity,
+                    }}
+                    className={cn(
+                      "absolute max-w-none select-none",
+                      blueprintPanelOpen && !editingLocked
+                        ? "cursor-move ring-2 ring-primary"
+                        : "pointer-events-none",
+                    )}
+                  />
+                </div>
+              </CustomOverlayMap>
+            ) : null}
             {pendingGroupMembers.length >= 2 ? (
               <>
                 <Polygon
@@ -1532,6 +1723,24 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               onClick={() => startShapeTool("polygon")}
             />
           </span>
+          {hasBlueprintImage ? (
+            <span
+              title={
+                anchor
+                  ? "배치도 맞추기 — 팜플렛을 지도 위에 겹쳐 보고 위치·크기·방향을 맞춥니다"
+                  : "축제 위치 좌표가 없어 배치도를 지도에 얹을 수 없습니다"
+              }
+            >
+              <IconButton
+                icon={<ImageIcon className="size-5" />}
+                aria-label="배치도 맞추기"
+                aria-pressed={blueprintPanelOpen}
+                disabled={!anchor}
+                className={cn("text-zinc-950", blueprintPanelOpen && "ring-2 ring-primary")}
+                onClick={() => setBlueprintPanelOpen((open) => !open)}
+              />
+            </span>
+          ) : null}
           <span title={editLockReason ?? "라인 그리기 — 지도를 눌러 꺾은점을 찍습니다"}>
             <IconButton
               icon={<RulerHorizontalIcon className="size-5" />}
@@ -1548,6 +1757,91 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           onZoomOut={() => setZoomStep((step) => Math.min(step + 1, 4))}
         />
       </div>
+
+      {blueprintPanelOpen && anchor && drawTool === "select" ? (
+        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex w-[min(92vw,860px)] -translate-x-1/2 flex-wrap items-end gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
+          <div className="flex flex-col gap-1">
+            <p className="body-small-bold text-zinc-950">배치도 맞추기</p>
+            <p className="body-caption text-zinc-500">이미지를 끌어 위치를 맞추세요</p>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="body-caption text-zinc-500">가로 실거리(m)</span>
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={10}
+              value={Math.round(anchor.groundWidthMeters)}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (!Number.isFinite(next) || next <= 0) return;
+                setAnchor((current) =>
+                  current ? { ...current, groundWidthMeters: Math.min(next, 100000) } : current,
+                );
+              }}
+              className="body-small w-28 rounded-md border border-zinc-200 px-2 py-1.5 text-zinc-950"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="body-caption text-zinc-500">회전(도)</span>
+            <input
+              type="number"
+              min={-360}
+              max={360}
+              step={1}
+              value={Math.round(anchor.rotationDegrees)}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (!Number.isFinite(next)) return;
+                setAnchor((current) =>
+                  current
+                    ? { ...current, rotationDegrees: Math.max(Math.min(next, 360), -360) }
+                    : current,
+                );
+              }}
+              className="body-small w-24 rounded-md border border-zinc-200 px-2 py-1.5 text-zinc-950"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="body-caption text-zinc-500">투명도</span>
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={Math.round(blueprintOpacity * 100)}
+              onChange={(event) => setBlueprintOpacity(Number(event.target.value) / 100)}
+              className="w-32"
+            />
+          </label>
+          <label className="body-small flex items-center gap-2 text-zinc-950">
+            <Checkbox
+              checked={blueprintVisible}
+              onCheckedChange={(checked) => setBlueprintVisible(checked === true)}
+            />
+            배치도 보기
+          </label>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!anchorDirty || anchorMutation.isPending}
+              onClick={() => setAnchor(serverAnchor)}
+            >
+              되돌리기
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!anchorDirty || anchorMutation.isPending || editingLocked}
+              title={editLockReason ?? undefined}
+              onClick={() => anchorMutation.mutate()}
+            >
+              {anchorMutation.isPending ? "저장 중..." : "배치도 위치 저장"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {drawTool === "polygon" || drawTool === "line" ? (
         <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
