@@ -3,16 +3,18 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CustomOverlayMap, Map as KakaoMap, Polygon } from "react-kakao-maps-sdk";
+import { CustomOverlayMap, Map as KakaoMap, Polygon, Polyline } from "react-kakao-maps-sdk";
 import {
   Cross2Icon,
   Crosshair2Icon,
+  DimensionsIcon,
   FaceIcon,
   FileIcon,
   HamburgerMenuIcon,
   HomeIcon,
   RadiobuttonIcon,
   ResetIcon,
+  RulerHorizontalIcon,
 } from "@radix-ui/react-icons";
 import { toast } from "sonner";
 import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
@@ -31,7 +33,10 @@ import {
   boothIdsToNodeIds,
   boothMapPinsToNodeChanges,
   nodeToLocalBooth,
+  nodeToLocalShape,
+  SHAPE_MINIMUM_POINTS,
   type LocalBoothPin,
+  type LocalMapShape,
 } from "./geometryWgs84";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
@@ -121,6 +126,30 @@ function centroidOf(members: LocalBoothPin[]) {
 
 const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
 
+/** 지도에서 고를 수 있는 그리기 도구. 설계서 "5. 오버레이 버튼 영역2"의 핀·폴리곤·라인이다. */
+type DrawTool = "select" | "pin" | "polygon" | "line";
+
+/** 폴리곤·라인의 기본 노드 유형. 세부 유형은 도형을 고른 뒤 팝오버에서 바꾼다. */
+const SHAPE_NODE_TYPE: Record<"polygon" | "line", NodeType> = {
+  polygon: "OPEN_SPACE",
+  line: "PATH",
+};
+const SHAPE_LABEL: Record<"polygon" | "line", string> = {
+  polygon: "구역",
+  line: "통로",
+};
+
+/** 도형 이름표와 팝오버를 띄울 기준점. 폴리곤은 무게중심, 라인은 가운데 꼭짓점을 쓴다. */
+function shapeAnchor(shape: LocalMapShape) {
+  if (shape.kind === "line") {
+    return shape.points[Math.floor(shape.points.length / 2)];
+  }
+  return {
+    lat: shape.points.reduce((sum, point) => sum + point.lat, 0) / shape.points.length,
+    lng: shape.points.reduce((sum, point) => sum + point.lng, 0) / shape.points.length,
+  };
+}
+
 /**
  * 카카오맵에서 부스 핀을 찍고 구역을 묶는 편집 화면.
  *
@@ -135,7 +164,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const setFullBleed = useConsoleUiStore((state) => state.setFullBleed);
   const [zoomStep, setZoomStep] = useState(0);
   const [boothListOpen, setBoothListOpen] = useState(false);
-  const [drawTool, setDrawTool] = useState<"select" | "pin">("select");
+  const [drawTool, setDrawTool] = useState<DrawTool>("select");
   const [pendingPinType, setPendingPinType] = useState<NodeType>("BOOTH");
   const [pinTypeMenuOpen, setPinTypeMenuOpen] = useState(false);
   const [mapLoading, mapError] = useKakaoMapLoader();
@@ -189,6 +218,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [editingBoothId, setEditingBoothId] = useState<string | null>(null);
   const [zones, setZones] = useState<LocalZone[]>([]);
+  /** 지도 위에 직접 그린 폴리곤·라인. 서버의 POLYGON/POLYLINE 노드와 1:1로 대응한다. */
+  const [shapes, setShapes] = useState<LocalMapShape[]>([]);
+  /** 지금 찍고 있는 도형의 꼭짓점들. "그리기 완료"를 눌러야 shapes로 넘어간다. */
+  const [draftPoints, setDraftPoints] = useState<{ lat: number; lng: number }[]>([]);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [expandedZoneIds, setExpandedZoneIds] = useState<Set<string>>(new Set());
@@ -267,6 +301,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     () => (groupPopoverOpen ? booths.filter((booth) => checkedIds.has(booth.id)) : []),
     [booths, checkedIds, groupPopoverOpen],
   );
+  const selectedShape = useMemo(
+    () => shapes.find((shape) => shape.id === selectedShapeId) ?? null,
+    [shapes, selectedShapeId],
+  );
   const mapCenter = editorQuery.data?.center ?? mapQuery.data?.center ?? festivalCenter;
 
   const saveMutation = useMutation({
@@ -275,12 +313,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         throw new Error("지도 정보를 불러오지 못했습니다.");
       }
       // 부스를 전부 지운 경우에도 삭제 내역은 서버에 보내야 하므로, 지울 노드가 있으면 통과시킨다.
-      if (booths.length === 0 && deletedNodeIds.length === 0) {
+      if (booths.length === 0 && shapes.length === 0 && deletedNodeIds.length === 0) {
         throw new Error("저장할 부스가 없습니다.");
       }
       return saveMapEditor(festivalId, mapQuery.data.mapId, {
         baseRevision: editRevision,
-        nodes: boothMapPinsToNodeChanges(booths, deletedNodeIds),
+        nodes: boothMapPinsToNodeChanges(booths, deletedNodeIds, shapes),
         zones: zones
           .map((zone, sortOrder) => ({
             zoneId: zone.id,
@@ -300,6 +338,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         editor.nodes
           .map(nodeToLocalBooth)
           .filter((booth): booth is LocalBoothPin => booth !== null),
+      );
+      setShapes(
+        editor.nodes
+          .map(nodeToLocalShape)
+          .filter((shape): shape is LocalMapShape => shape !== null),
       );
       setZones(
         (editor.zones ?? []).map((zone) => ({
@@ -331,6 +374,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             editor.nodes
               .map(nodeToLocalBooth)
               .filter((booth): booth is LocalBoothPin => booth !== null),
+          );
+          setShapes(
+            editor.nodes
+              .map(nodeToLocalShape)
+              .filter((shape): shape is LocalMapShape => shape !== null),
           );
           setDeletedNodeIds([]);
         }
@@ -420,6 +468,13 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         .map(nodeToLocalBooth)
         .filter((booth): booth is LocalBoothPin => booth !== null),
     );
+    setShapes(
+      editorQuery.data.nodes
+        .map(nodeToLocalShape)
+        .filter((shape): shape is LocalMapShape => shape !== null),
+    );
+    setDraftPoints([]);
+    setSelectedShapeId(null);
     setEditRevision(editorQuery.data.editRevision);
     setZones(
       (editorQuery.data.zones ?? []).map((zone) => ({
@@ -437,8 +492,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
 
   // 저장하지 않은 편집이 있는지. 브라우저 뒤로가기·탭 닫기로 작업이 사라지는 것을 막는 데 쓴다.
   const currentSnapshot = useMemo(
-    () => JSON.stringify({ booths, zones, deletedNodeIds }),
-    [booths, zones, deletedNodeIds],
+    () => JSON.stringify({ booths, shapes, zones, deletedNodeIds }),
+    [booths, shapes, zones, deletedNodeIds],
   );
   // 서버 데이터를 새로 채울 때마다(지도 교체·AI 분석 완료) 기준 스냅샷도 다시 잡는다.
   // 그러지 않으면 AI가 뿌린 부스가 곧바로 "저장하지 않은 편집"으로 잡힌다.
@@ -453,12 +508,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const restoreSnapshot = useCallback((value: string) => {
     const restored = JSON.parse(value) as {
       booths: LocalBoothPin[];
+      shapes?: LocalMapShape[];
       zones: LocalZone[];
       deletedNodeIds: string[];
     };
     setBooths(restored.booths);
+    setShapes(restored.shapes ?? []);
     setZones(restored.zones);
     setDeletedNodeIds(restored.deletedNodeIds);
+    setDraftPoints([]);
+    setSelectedShapeId(null);
     // 되돌린 결과에 없는 부스를 가리키고 있을 수 있어 선택 상태는 비운다.
     setCheckedIds(new Set());
     setEditingBoothId(null);
@@ -502,6 +561,33 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, undoDisabled, redoDisabled]);
 
+  // 그리는 중 단축키 — Enter로 확정, Esc로 그만두기, Backspace로 한 점 무르기.
+  useEffect(() => {
+    if (drawTool !== "polygon" && drawTool !== "line") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        finishDraftShape();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelDraftShape();
+        return;
+      }
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        undoDraftPoint();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // 그리기 상태(draftPoints)가 바뀔 때마다 최신 값을 보도록 다시 건다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawTool, draftPoints]);
+
   useEffect(() => {
     if (!hasUnsavedChanges) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -534,6 +620,63 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setEditingBoothId(id);
     setDrawTool("select");
     setPinTypeMenuOpen(false);
+  }
+
+  /** 폴리곤·라인 그리기를 시작한다. 같은 버튼을 다시 누르면 그리기를 접는다. */
+  function startShapeTool(kind: "polygon" | "line") {
+    setPinTypeMenuOpen(false);
+    setSelectedShapeId(null);
+    setEditingBoothId(null);
+    setDraftPoints([]);
+    setDrawTool((current) => (current === kind ? "select" : kind));
+  }
+
+  /** 그리는 중인 도형에 꼭짓점을 하나 더한다. */
+  function addDraftPoint(lat: number, lng: number) {
+    setDraftPoints((prev) => [...prev, { lat, lng }]);
+  }
+
+  /** 찍어 둔 꼭짓점으로 도형을 확정한다. 최소 점수를 못 채우면 아무 일도 하지 않는다. */
+  function finishDraftShape() {
+    if (drawTool !== "polygon" && drawTool !== "line") return;
+    const kind = drawTool;
+    if (draftPoints.length < SHAPE_MINIMUM_POINTS[kind]) return;
+    const id = crypto.randomUUID();
+    setShapes((prev) => [
+      ...prev,
+      {
+        id,
+        nodeId: null,
+        name: `${SHAPE_LABEL[kind]}명 ${prev.filter((shape) => shape.kind === kind).length + 1}`,
+        nodeType: SHAPE_NODE_TYPE[kind],
+        kind,
+        points: draftPoints,
+        isNew: true,
+      },
+    ]);
+    setDraftPoints([]);
+    setDrawTool("select");
+    setEditingBoothId(null);
+    setSelectedShapeId(id);
+  }
+
+  function cancelDraftShape() {
+    setDraftPoints([]);
+    setDrawTool("select");
+  }
+
+  /** 마지막으로 찍은 꼭짓점 하나를 무른다. 그리는 중에는 실행취소 기록에 남기지 않는다. */
+  function undoDraftPoint() {
+    setDraftPoints((prev) => prev.slice(0, -1));
+  }
+
+  function deleteShape(shapeId: string) {
+    const target = shapes.find((shape) => shape.id === shapeId);
+    if (target?.nodeId) {
+      setDeletedNodeIds((prev) => [...prev, target.nodeId!]);
+    }
+    setShapes((prev) => prev.filter((shape) => shape.id !== shapeId));
+    setSelectedShapeId(null);
   }
 
   /** 끌고 있는 핀은 아직 booths에 반영되지 않았으므로 임시 위치를 대신 쓴다. */
@@ -787,7 +930,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       ) : (
         <div
           ref={mapWrapperRef}
-          className={cn("absolute inset-0 isolate", drawTool === "pin" && "cursor-crosshair")}
+          className={cn("absolute inset-0 isolate", drawTool !== "select" && "cursor-crosshair")}
         >
           <KakaoMap
             center={mapCenter}
@@ -801,10 +944,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               map.setMaxLevel(8);
             }}
             onClick={(_target, mouseEvent) => {
-              if (drawTool !== "pin" || editingLocked) return;
+              if (editingLocked) return;
               const latLng = mouseEvent.latLng;
               if (!latLng) return;
-              addBoothAt(latLng.getLat(), latLng.getLng());
+              if (drawTool === "pin") {
+                addBoothAt(latLng.getLat(), latLng.getLng());
+                return;
+              }
+              if (drawTool === "polygon" || drawTool === "line") {
+                addDraftPoint(latLng.getLat(), latLng.getLng());
+              }
             }}
           >
             {pendingGroupMembers.length >= 2 ? (
@@ -849,6 +998,59 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                   </Fragment>
                 );
               })}
+            {shapes.map((shape) => {
+              const selected = shape.id === selectedShapeId;
+              const select = () => {
+                setSelectedShapeId(shape.id);
+                setEditingBoothId(null);
+              };
+              return shape.kind === "polygon" ? (
+                <Polygon
+                  key={shape.id}
+                  path={shape.points}
+                  fillColor="#236cf6"
+                  fillOpacity={selected ? 0.25 : 0.1}
+                  strokeColor="#236cf6"
+                  strokeWeight={selected ? 3 : 2}
+                  strokeOpacity={0.8}
+                  onClick={select}
+                />
+              ) : (
+                <Polyline
+                  key={shape.id}
+                  path={shape.points}
+                  strokeColor="#236cf6"
+                  strokeWeight={selected ? 6 : 4}
+                  strokeOpacity={0.9}
+                  onClick={select}
+                />
+              );
+            })}
+            {/* 그리는 중인 도형 — 확정 전이라 점선으로 구분해 보여 준다. */}
+            {draftPoints.length >= 2 ? (
+              drawTool === "polygon" && draftPoints.length >= 3 ? (
+                <Polygon
+                  path={draftPoints}
+                  fillColor="#236cf6"
+                  fillOpacity={0.1}
+                  strokeColor="#236cf6"
+                  strokeWeight={2}
+                  strokeStyle="shortdash"
+                />
+              ) : (
+                <Polyline
+                  path={draftPoints}
+                  strokeColor="#236cf6"
+                  strokeWeight={3}
+                  strokeStyle="shortdash"
+                />
+              )
+            ) : null}
+            {draftPoints.map((point, index) => (
+              <CustomOverlayMap key={`draft-${index}`} position={point} zIndex={25}>
+                <span className="block size-2.5 rounded-full border-2 border-primary bg-white shadow" />
+              </CustomOverlayMap>
+            ))}
             {visibleBooths.map((booth) => {
               const isSelected = booth.id === selectedId;
               return (
@@ -968,6 +1170,32 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                     setEditingBoothId(null);
                     setSelectedZoneId(null);
                   }}
+                />
+              </CustomOverlayMap>
+            ) : null}
+            {selectedShape && !editingLocked ? (
+              <CustomOverlayMap
+                position={shapeAnchor(selectedShape)}
+                {...POPOVER_ANCHORS}
+                zIndex={30}
+              >
+                <MapInfoPopover
+                  mode="booth-edit"
+                  style={{ position: "static" }}
+                  initialName={selectedShape.name}
+                  typeLabel={SHAPE_LABEL[selectedShape.kind]}
+                  confirmLabel={selectedShape.isNew ? "등록" : "수정"}
+                  hideCancel
+                  onConfirm={(name) => {
+                    setShapes((prev) =>
+                      prev.map((shape) =>
+                        shape.id === selectedShape.id ? { ...shape, name, isNew: false } : shape,
+                      ),
+                    );
+                    setSelectedShapeId(null);
+                  }}
+                  onCancel={() => setSelectedShapeId(null)}
+                  onDelete={() => deleteShape(selectedShape.id)}
                 />
               </CustomOverlayMap>
             ) : null}
@@ -1133,6 +1361,41 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             {ungroupedBooths.map((booth) => renderBoothRow(booth, { indent: false }))}
           </div>
 
+          {/* 직접 그린 폴리곤·라인 — 부스 핀과 성격이 달라 구역 목록과 분리해 보여 준다. */}
+          {shapes.length > 0 ? (
+            <div className="flex flex-col gap-1 border-t border-zinc-200 pt-3">
+              <p className="body-small-bold text-zinc-950">
+                도형 <span className="text-primary">{shapes.length}</span>
+              </p>
+              {shapes.map((shape) => (
+                <button
+                  key={shape.id}
+                  type="button"
+                  onClick={() => {
+                    setEditingBoothId(null);
+                    setSelectedShapeId(shape.id);
+                    const anchor = shapeAnchor(shape);
+                    kakaoMapRef.current?.panTo(
+                      new window.kakao.maps.LatLng(anchor.lat, anchor.lng),
+                    );
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-1 py-2 text-left hover:bg-zinc-100",
+                    selectedShapeId === shape.id && "bg-zinc-100",
+                  )}
+                >
+                  <span className="size-4 shrink-0 text-primary [&_svg]:size-4">
+                    {shape.kind === "polygon" ? <DimensionsIcon /> : <RulerHorizontalIcon />}
+                  </span>
+                  <span className="body-small truncate text-zinc-950">{shape.name}</span>
+                  <span className="body-caption ml-auto shrink-0 text-zinc-500">
+                    {SHAPE_LABEL[shape.kind]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {checkedIds.size >= 2 ? (
             <Button
               type="button"
@@ -1229,7 +1492,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             aria-pressed={drawTool === "pin"}
             disabled={editingLocked}
             className={cn("text-zinc-950", drawTool === "pin" && "ring-2 ring-primary")}
-            onClick={() => setPinTypeMenuOpen((open) => !open)}
+            onClick={() => {
+              setDraftPoints([]);
+              setPinTypeMenuOpen((open) => !open);
+            }}
           />
           {pinTypeMenuOpen ? (
             <div className="absolute right-full bottom-20 mr-2 w-25 rounded-lg border border-zinc-200 bg-white p-2 shadow-md">
@@ -1256,17 +1522,62 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               ))}
             </div>
           ) : null}
-          {/*
-            폴리곤·라인 버튼은 눌리지 않는 채로 계속 노출돼 "수정이 안 된다"는 오해를
-            반복해서 만들었다. 자유 도형을 서버가 받을 수 있게 되기 전까지는 버튼 자체를
-            숨긴다. 구역 경계는 지금도 묶인 부스 핀에서 자동으로 그려진다.
-          */}
+          <span title={editLockReason ?? "폴리곤 그리기 — 지도를 눌러 꼭짓점을 찍습니다"}>
+            <IconButton
+              icon={<DimensionsIcon className="size-5" />}
+              aria-label="폴리곤 추가"
+              aria-pressed={drawTool === "polygon"}
+              disabled={editingLocked}
+              className={cn("text-zinc-950", drawTool === "polygon" && "ring-2 ring-primary")}
+              onClick={() => startShapeTool("polygon")}
+            />
+          </span>
+          <span title={editLockReason ?? "라인 그리기 — 지도를 눌러 꺾은점을 찍습니다"}>
+            <IconButton
+              icon={<RulerHorizontalIcon className="size-5" />}
+              aria-label="라인 추가"
+              aria-pressed={drawTool === "line"}
+              disabled={editingLocked}
+              className={cn("text-zinc-950", drawTool === "line" && "ring-2 ring-primary")}
+              onClick={() => startShapeTool("line")}
+            />
+          </span>
         </div>
         <MapZoomControls
           onZoomIn={() => setZoomStep((step) => Math.max(step - 1, -2))}
           onZoomOut={() => setZoomStep((step) => Math.min(step + 1, 4))}
         />
       </div>
+
+      {drawTool === "polygon" || drawTool === "line" ? (
+        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-md lg:bottom-10">
+          <p className="body-small text-zinc-950">
+            지도를 눌러 {SHAPE_LABEL[drawTool]} 꼭짓점을 찍으세요
+            <span className="body-small-bold ml-2 text-primary">
+              {draftPoints.length}개 / 최소 {SHAPE_MINIMUM_POINTS[drawTool]}개
+            </span>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={draftPoints.length === 0}
+            onClick={undoDraftPoint}
+          >
+            한 점 취소
+          </Button>
+          <Button type="button" variant="outline" onClick={cancelDraftShape}>
+            그만두기
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={draftPoints.length < SHAPE_MINIMUM_POINTS[drawTool]}
+            onClick={finishDraftShape}
+          >
+            그리기 완료
+          </Button>
+        </div>
+      ) : null}
 
       <ConfirmDialog
         open={saveDialogOpen}
