@@ -1890,9 +1890,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         onOpenChange={setAnalyzeDialogOpen}
         title="배치도 이미지로 AI 분석을 시작할까요?"
         description={
+          // 배치도를 갈면 서버가 새 지도 버전에 기본 앵커를 다시 붙여, 손으로 맞춰 둔
+          // 위치·크기·방향이 초기화된다. 다시 맞춰야 한다는 것을 미리 알린다.
           booths.length > 0
-            ? `지도를 새로 만들기 때문에 지금 찍혀 있는 핀 ${booths.length}개가 사라집니다. 저장하지 않은 편집도 함께 사라집니다.`
-            : "AI가 배치도에서 부스를 찾아 핀으로 뿌려 줍니다. 분석이 끝날 때까지 편집과 저장은 막힙니다."
+            ? `지도를 새로 만들기 때문에 지금 찍혀 있는 핀 ${booths.length}개가 사라집니다. 저장하지 않은 편집도 함께 사라지고, 맞춰 둔 배치도 위치도 기본값으로 돌아갑니다.`
+            : "AI가 배치도에서 부스를 찾아 핀으로 뿌려 줍니다. 분석이 끝날 때까지 편집과 저장은 막히고, 맞춰 둔 배치도 위치는 기본값으로 돌아갑니다."
         }
         confirmLabel="이미지 선택"
         confirmVariant="primary"
