@@ -6,12 +6,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CustomOverlayMap, Map as KakaoMap, Polygon, Polyline } from "react-kakao-maps-sdk";
 import {
   Cross2Icon,
-  Crosshair2Icon,
   DimensionsIcon,
-  FaceIcon,
   FileIcon,
   HamburgerMenuIcon,
-  HomeIcon,
   ImageIcon,
   CornersIcon,
   ClockIcon,
@@ -61,6 +58,7 @@ import { PamphletOverlay } from "./PamphletOverlay";
 import { uniqueVertices, validateBoundary, withoutClosingDuplicate } from "./polygonGeometry";
 import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
+import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
@@ -89,14 +87,6 @@ interface LocalZone {
 function createZoneId() {
   return crypto.randomUUID();
 }
-
-const NODE_TYPE_LABEL: Partial<Record<NodeType, string>> = {
-  OTHER: "시설",
-  BOOTH: "부스",
-  ENTRANCE: "입구",
-  EXIT: "출구",
-  RESTROOM: "화장실",
-};
 
 /** 구역 멤버를 감싸는 최소 볼록 다각형에 여백을 더해 구역 경계를 만든다. */
 function zonePolygonPath(members: LocalBoothPin[]) {
@@ -1187,9 +1177,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           className="flex min-w-0 flex-1 items-center gap-1"
         >
           <span
-            className={`size-4 shrink-0 ${booth.uncertain ? "text-secondary-600" : "text-primary"}`}
+            title={NODE_TYPE_LABEL[booth.nodeType] ?? "시설"}
+            className={`size-4 shrink-0 [&_svg]:size-4 ${
+              booth.uncertain ? "text-secondary-600" : "text-primary"
+            }`}
           >
-            <RadiobuttonIcon />
+            {nodeTypeIcon(booth.nodeType)}
           </span>
           <span className="body-regular truncate text-left text-zinc-950">{booth.name}</span>
           {booth.uncertain ? (
@@ -1494,8 +1487,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       setCheckedIds(new Set([booth.id]));
                       setEditingBoothId(booth.id);
                     }}
+                    /*
+                      아이콘을 넣으면서 히트 영역을 넉넉히 잡는다(28px). 점(12px)만 할 때는
+                      살짝만 빗나가도 지도 클릭으로 새어 핀 대신 지도가 움직였다.
+                    */
                     className={cn(
-                      "relative flex size-3 touch-none items-center justify-center",
+                      "relative flex size-7 touch-none items-center justify-center",
                       editingLocked || drawTool === "pin"
                         ? "cursor-default"
                         : draggingPin?.id === booth.id
@@ -1503,14 +1500,21 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                           : "cursor-grab",
                     )}
                   >
-                    {isSelected ? (
-                      <span className="absolute size-3 rounded-full bg-point-600/25" />
-                    ) : null}
+                    {/*
+                      유형별 아이콘으로 부스·화장실·입구·출구를 지도에서 바로 구분한다.
+                      AI가 찾아 검수가 필요한 핀은 색으로 계속 구분한다(주황).
+                    */}
                     <span
-                      className={`relative rounded-full ${
-                        isSelected ? "size-1 bg-point-600" : "size-3 bg-point-600 shadow-sm"
-                      }`}
-                    />
+                      className={cn(
+                        "relative flex size-5 items-center justify-center rounded-full border shadow-sm [&_svg]:size-3",
+                        booth.uncertain
+                          ? "border-white bg-secondary-600 text-white"
+                          : "border-white bg-point-600 text-white",
+                        isSelected && "ring-2 ring-point-600/40",
+                      )}
+                    >
+                      {nodeTypeIcon(booth.nodeType)}
+                    </span>
                   </button>
                 </CustomOverlayMap>
               );
@@ -1923,18 +1927,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           />
           {pinTypeMenuOpen ? (
             <div className="absolute right-full bottom-20 mr-2 w-25 rounded-lg border border-zinc-200 bg-white p-2 shadow-md">
-              {[
-                { type: "OTHER" as const, label: "시설", icon: <RadiobuttonIcon /> },
-                { type: "BOOTH" as const, label: "부스", icon: <Crosshair2Icon /> },
-                { type: "ENTRANCE" as const, label: "입구", icon: <HomeIcon /> },
-                { type: "EXIT" as const, label: "출구", icon: <HomeIcon /> },
-                { type: "RESTROOM" as const, label: "화장실", icon: <FaceIcon /> },
-              ].map((option) => (
+              {PIN_TYPE_OPTIONS.map((option) => (
                 <button
-                  key={option.type}
+                  key={option.value}
                   type="button"
                   onClick={() => {
-                    setPendingPinType(option.type);
+                    setPendingPinType(option.value);
                     setDrawTool("pin");
                     setPinTypeMenuOpen(false);
                   }}
