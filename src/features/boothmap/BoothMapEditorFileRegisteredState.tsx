@@ -39,6 +39,7 @@ import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { primaryFestivalCenter } from "./mapCenter";
 import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
+import { useEditHistory } from "./useEditHistory";
 import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
 
@@ -407,6 +408,60 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setSavedSnapshot({ key: seededKey, value: currentSnapshot });
   }
   const hasUnsavedChanges = savedSnapshot !== null && savedSnapshot.value !== currentSnapshot;
+
+  // 실행취소/다시실행으로 되돌아온 스냅샷을 화면 상태에 다시 적용한다.
+  // 여기서 복원한 결과는 currentSnapshot과 글자까지 같아지므로 히스토리에 다시 쌓이지 않는다.
+  const restoreSnapshot = useCallback((value: string) => {
+    const restored = JSON.parse(value) as {
+      booths: LocalBoothPin[];
+      zones: LocalZone[];
+      deletedNodeIds: string[];
+    };
+    setBooths(restored.booths);
+    setZones(restored.zones);
+    setDeletedNodeIds(restored.deletedNodeIds);
+    // 되돌린 결과에 없는 부스를 가리키고 있을 수 있어 선택 상태는 비운다.
+    setCheckedIds(new Set());
+    setEditingBoothId(null);
+    setSelectedZoneId(null);
+    setGroupPopoverOpen(false);
+  }, []);
+  const { canUndo, canRedo, undo, redo } = useEditHistory({
+    baselineKey: seededKey,
+    snapshot: currentSnapshot,
+    onRestore: restoreSnapshot,
+  });
+  const undoDisabled = !canUndo || editingLocked;
+  const redoDisabled = !canRedo || editingLocked;
+
+  // Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z 단축키.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.key.toLowerCase() !== "z") return;
+      // 이름 입력 중에는 브라우저 기본 실행취소(글자 되돌리기)를 그대로 둔다.
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
+      if (event.shiftKey) {
+        if (redoDisabled) return;
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (undoDisabled) return;
+      event.preventDefault();
+      undo();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo, undoDisabled, redoDisabled]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -952,20 +1007,38 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
 
       <div className="absolute top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 lg:top-10 lg:right-8 lg:left-auto lg:gap-4">
         <div className="flex items-center gap-2">
-          <span title="편집 내용이 없어 실행취소할 수 없습니다.">
+          <span
+            title={
+              editingLocked
+                ? "AI 분석이 끝난 뒤에 편집할 수 있습니다."
+                : canUndo
+                  ? "실행취소 (Ctrl/⌘+Z)"
+                  : "편집 내용이 없어 실행취소할 수 없습니다."
+            }
+          >
             <IconButton
               icon={<ResetIcon className="size-5" />}
               aria-label="실행취소"
-              disabled
-              className="text-zinc-500"
+              disabled={undoDisabled}
+              onClick={undo}
+              className={undoDisabled ? "text-zinc-500" : "text-zinc-950"}
             />
           </span>
-          <span title="편집 내용이 없어 다시실행할 수 없습니다.">
+          <span
+            title={
+              editingLocked
+                ? "AI 분석이 끝난 뒤에 편집할 수 있습니다."
+                : canRedo
+                  ? "다시실행 (Shift+Ctrl/⌘+Z)"
+                  : "편집 내용이 없어 다시실행할 수 없습니다."
+            }
+          >
             <IconButton
               icon={<ResetIcon className="size-5 -scale-x-100" />}
               aria-label="다시실행"
-              disabled
-              className="text-zinc-500"
+              disabled={redoDisabled}
+              onClick={redo}
+              className={redoDisabled ? "text-zinc-500" : "text-zinc-950"}
             />
           </span>
         </div>
