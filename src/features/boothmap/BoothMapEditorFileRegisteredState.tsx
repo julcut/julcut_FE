@@ -55,14 +55,19 @@ import {
 } from "./mapPresentation";
 import { cornersFromAnchor } from "./overlayProjection";
 import { PamphletOverlay } from "./PamphletOverlay";
-import { uniqueVertices, validateBoundary, withoutClosingDuplicate } from "./polygonGeometry";
+import {
+  containsPoint,
+  uniqueVertices,
+  validateBoundary,
+  withoutClosingDuplicate,
+} from "./polygonGeometry";
 import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
-import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
+import type { CreateCoordinateMapResponse, NodeType } from "./types";
 import { useEditHistory } from "./useEditHistory";
 import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
@@ -153,7 +158,11 @@ function applyPartitionedNodes(
   }
 }
 
-const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
+/*
+  말풍선은 고른 대상 위에 뜬다. yAnchor를 정확히 1로 두면 말풍선 꼬리가 핀에 닿아
+  핀을 가린다. 높이의 12%만큼 더 올려 핀이 보이게 띄운다.
+*/
+const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1.12 } as const;
 
 /** 지도에서 고를 수 있는 그리기 도구. 핀·폴리곤·라인은 노드, 경계·대기줄은 표시 설정이다. */
 type DrawTool = "select" | "pin" | "polygon" | "line" | "boundary" | "queue-line";
@@ -167,6 +176,17 @@ const SHAPE_LABEL: Record<"polygon" | "line", string> = {
   polygon: "구역",
   line: "통로",
 };
+
+/** 지도 클릭 두 번이 사실상 같은 자리인지. 서버는 이어진 중복 점을 거절한다. */
+function isSamePlace(a: LatLng | undefined, b: LatLng, tolerance = 0.000015) {
+  if (!a) return false;
+  return Math.abs(a.lat - b.lat) < tolerance && Math.abs(a.lng - b.lng) < tolerance;
+}
+
+/** 첫 꼭짓점 근처를 다시 눌렀고 최소 점수를 채웠는지. 도형을 닫는 신호로 쓴다. */
+function closesDraft(points: LatLng[], point: LatLng, minimum: number, tolerance = 0.00005) {
+  return points.length >= minimum && isSamePlace(points[0], point, tolerance);
+}
 
 /** 노드 유형이 어떤 대분류에 속하는지. 설계서 "5. 유형 변경하기"의 핀·폴리곤·라인이다. */
 function categoryOfNodeType(nodeType: NodeType): "pin" | "polygon" | "line" {
@@ -231,6 +251,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [pinTypeMenuOpen, setPinTypeMenuOpen] = useState(false);
   const [mapLoading, mapError] = useKakaoMapLoader();
   const mapWrapperRef = useRef<HTMLDivElement>(null);
+  const boothListRef = useRef<HTMLDivElement>(null);
+  const mapToolsRef = useRef<HTMLDivElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const overlayFileInputRef = useRef<HTMLInputElement>(null);
   const localImageFiles = useRef(new Map<string, File>());
@@ -238,6 +260,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [removePamphletOpen, setRemovePamphletOpen] = useState(false);
+  const [clearQueuePathOpen, setClearQueuePathOpen] = useState(false);
   /*
     분석 안내를 닫아 둔 작업 키. 새 분석이 시작되거나 상태가 바뀌면 다시 띄운다 —
     한 번 닫았다고 다음 결과까지 숨기면 무엇이 끝났는지 알 수 없다.
@@ -332,9 +355,25 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     zones.forEach((zone) => zone.boothIds.forEach((id) => map.set(id, zone.id)));
     return map;
   }, [zones]);
+  /*
+    화면설계서 4-6의 "상위구역". 구역 폴리곤 안에 들어온 부스를 그 구역의 하위로 본다.
+    구역과 부스를 잇는 필드를 따로 두지 않고 좌표로 판정하므로, 저장했다 다시 불러와도
+    소속이 그대로 살아난다.
+  */
+  const polygonShapes = useMemo(() => shapes.filter((shape) => shape.kind === "polygon"), [shapes]);
+  const lineShapes = useMemo(() => shapes.filter((shape) => shape.kind === "line"), [shapes]);
+  const shapeIdByBoothId = useMemo(() => {
+    const map = new Map<string, string>();
+    booths.forEach((booth) => {
+      const owner = polygonShapes.find((shape) => containsPoint(shape.points, booth));
+      if (owner) map.set(booth.id, owner.id);
+    });
+    return map;
+  }, [booths, polygonShapes]);
   const ungroupedBooths = useMemo(
-    () => booths.filter((booth) => !zoneIdByBoothId.has(booth.id)),
-    [booths, zoneIdByBoothId],
+    () =>
+      booths.filter((booth) => !zoneIdByBoothId.has(booth.id) && !shapeIdByBoothId.has(booth.id)),
+    [booths, zoneIdByBoothId, shapeIdByBoothId],
   );
   // 그룹(구역)에 속한 부스 핀은 그 구역이 선택됐을 때만 지도에 노출한다 —
   // "4-4. 축제부스지도 - 아무것도 선택하지 않은 경우" 화면설계서 기준(최상위구역 폴리곤만 노출).
@@ -376,6 +415,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         : null,
     [selectedBooth, zones],
   );
+  /*
+    말풍선의 "상위구역". 구역 폴리곤 안에 있으면 그 구역 이름을, 아니면 묶어 둔
+    그룹 이름을 쓴다. 둘 다 없으면 설계서 모달처럼 "-"로 남긴다.
+  */
+  const selectedBoothParentName = useMemo(() => {
+    if (!selectedBooth) return "-";
+    const owner = polygonShapes.find(
+      (shape) => shape.id === shapeIdByBoothId.get(selectedBooth.id),
+    );
+    return owner?.name ?? selectedBoothZone?.name ?? "-";
+  }, [selectedBooth, polygonShapes, shapeIdByBoothId, selectedBoothZone]);
   const selectedZone = useMemo(
     () => zones.find((zone) => zone.id === selectedZoneId) ?? null,
     [zones, selectedZoneId],
@@ -385,10 +435,38 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     [selectedZone, booths],
   );
 
+  const selectedLatitude = selectedBooth?.lat;
+  const selectedLongitude = selectedBooth?.lng;
   useEffect(() => {
-    if (!selectedBooth || !kakaoMapRef.current || !window.kakao?.maps) return;
-    kakaoMapRef.current.panTo(new window.kakao.maps.LatLng(selectedBooth.lat, selectedBooth.lng));
-  }, [selectedBooth]);
+    const wrapper = mapWrapperRef.current;
+    if (selectedLatitude == null || selectedLongitude == null || !kakaoMap || !wrapper) return;
+
+    function centerSelectedBooth() {
+      if (!wrapper || !kakaoMap) return;
+      const bounds = wrapper.getBoundingClientRect();
+      const list = boothListRef.current?.getBoundingClientRect();
+      const tools = mapToolsRef.current?.getBoundingClientRect();
+      // 메뉴가 덮고 있는 부분을 제외한 지도 영역의 가운데에 선택한 핀을 둔다.
+      const left = list?.width ? Math.max(0, list.right - bounds.left) : 0;
+      const right = tools?.width ? Math.min(bounds.width, tools.left - bounds.left) : bounds.width;
+      const targetX = (left + right) / 2;
+      const projection = kakaoMap.getProjection();
+      const point = projection.containerPointFromCoords(
+        new window.kakao.maps.LatLng(selectedLatitude!, selectedLongitude!),
+      );
+      kakaoMap.panTo(
+        projection.coordsFromContainerPoint(
+          new window.kakao.maps.Point(point.x + bounds.width / 2 - targetX, point.y),
+        ),
+      );
+    }
+
+    centerSelectedBooth();
+    const observer = new ResizeObserver(centerSelectedBooth);
+    observer.observe(wrapper);
+    if (boothListRef.current) observer.observe(boothListRef.current);
+    return () => observer.disconnect();
+  }, [selectedId, selectedLatitude, selectedLongitude, kakaoMap, boothListOpen]);
 
   // 서버 데이터를 새로 받을 때마다(최초 진입, AI 분석 완료 등) 부스 전체가 보이도록
   // 한 번 맞춘다. 그 뒤로는 사용자가 옮기고 확대한 위치를 존중한다.
@@ -535,26 +613,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     onError: (error) => toast.error(getApiErrorMessage(error, "배치도 업로드에 실패했습니다.")),
   });
 
-  // 분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
-  const handleAnalysisCompleted = useCallback(
-    async (status: MapAnalysisStatusResponse) => {
-      await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
-      setSeedToken((token) => token + 1);
-      if (status.acceptedCount > 0) {
-        toast.success(`부스 후보 ${status.acceptedCount}개를 찾았습니다.`, {
-          description:
-            status.rejectedCount > 0
-              ? `읽지 못한 ${status.rejectedCount}개는 제외했습니다. 위치와 이름을 확인해 주세요.`
-              : "위치와 이름을 확인한 뒤 저장해 주세요.",
-        });
-        return;
-      }
-      toast.info("배치도에서 부스를 찾지 못했습니다.", {
-        description: "핀 도구로 직접 찍거나, 더 선명한 배치도로 다시 시도해 주세요.",
-      });
-    },
-    [festivalId, queryClient],
-  );
+  /*
+    분석이 끝나면 서버가 새로 저장한 AI 노드를 받아 화면 상태를 다시 채운다.
+    결과 문구는 지도 위 분석 안내 카드가 이미 같은 내용으로 보여 주므로 토스트를
+    따로 띄우지 않는다 — 같은 말이 두 번 떠서 화면만 가렸다.
+  */
+  const handleAnalysisCompleted = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
+    setSeedToken((token) => token + 1);
+  }, [festivalId, queryClient]);
 
   const analysis = useMapAnalysis({
     festivalId,
@@ -724,6 +791,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   }, [hasUnsavedChanges]);
 
   function addBoothAt(lat: number, lng: number) {
+    /*
+      화면설계서 4-6은 상위구역을 고른 뒤 그 구역 폴리곤 안에 부스를 찍게 한다.
+      밖에 찍었다고 막지는 않되(지도를 옮겨 가며 찍는 흐름을 끊는다), 어느 구역에도
+      들어가지 않았다는 것은 알려 준다.
+    */
+    if (selectedShape?.kind === "polygon" && !containsPoint(selectedShape.points, { lat, lng })) {
+      toast.info(`${selectedShape.name} 밖에 찍었습니다.`, {
+        description: "구역 안에 찍으면 그 구역의 부스로 묶입니다.",
+      });
+    }
     const id = crypto.randomUUID();
     setBooths((prev) => [
       ...prev,
@@ -900,7 +977,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     return map;
   }, [booths, dashboardQuery.data?.booths]);
   const queueByBoothId = useMemo(() => {
-    const map = new Map<string, { queueId: string; path: LatLng[] | null }>();
+    const map = new Map<
+      string,
+      {
+        queueId: string;
+        path: LatLng[] | null;
+        tailLatitude: number | null;
+        tailLongitude: number | null;
+      }
+    >();
     (queuesQuery.data?.queues ?? []).forEach((queue) => map.set(String(queue.boothId), queue));
     return map;
   }, [queuesQuery.data?.queues]);
@@ -946,6 +1031,22 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const queueSaveMutation = useMutation({
     mutationFn: async (path: LatLng[]) => {
       if (!queueDraftId) throw new Error("승인된 부스 대기열이 없습니다.");
+      /*
+        빈 배열은 "경로 삭제"다(백엔드 BE-05: null=유지, []=삭제, 1점 거절).
+        줄끝 좌표는 대기시간 계산에 쓰이므로 지우지 않고 지금 값을 그대로 다시 보낸다.
+      */
+      if (path.length === 0) {
+        const tailLatitude = selectedQueue?.tailLatitude;
+        const tailLongitude = selectedQueue?.tailLongitude;
+        if (tailLatitude == null || tailLongitude == null) {
+          throw new Error("줄끝 위치가 없어 경로만 지울 수 없습니다.");
+        }
+        return updateQueueTail(festivalId, queueDraftId, {
+          tailLatitude,
+          tailLongitude,
+          path: [],
+        });
+      }
       if (path.length < 2 || path.length > 500)
         throw new Error("대기줄은 2~500개의 점이 필요합니다.");
       const tail = path[path.length - 1];
@@ -1409,6 +1510,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
             setCheckedIds(new Set([booth.id]));
             setEditingBoothId(booth.id);
+            setBoothListOpen(false);
           }}
           className="flex min-w-0 flex-1 items-center gap-1"
         >
@@ -1526,23 +1628,51 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               if (editingLocked || panOverride) return;
               const latLng = mouseEvent.latLng;
               if (!latLng) return;
+              const point = { lat: latLng.getLat(), lng: latLng.getLng() };
               if (drawTool === "pin") {
-                addBoothAt(latLng.getLat(), latLng.getLng());
+                addBoothAt(point.lat, point.lng);
                 return;
               }
               if (drawTool === "polygon" || drawTool === "line") {
-                addDraftPoint(latLng.getLat(), latLng.getLng());
+                // 첫 꼭짓점을 다시 누르면 도형을 닫는다(더블클릭의 첫 번째 클릭도 여기서 걸린다).
+                if (closesDraft(draftPoints, point, SHAPE_MINIMUM_POINTS[drawTool])) {
+                  finishDraftShape();
+                  return;
+                }
+                if (isSamePlace(draftPoints[draftPoints.length - 1], point)) return;
+                addDraftPoint(point.lat, point.lng);
                 return;
               }
               if (drawTool === "boundary") {
-                setBoundaryDraft((prev) => [
-                  ...prev,
-                  { lat: latLng.getLat(), lng: latLng.getLng() },
-                ]);
+                if (closesDraft(boundaryDraft, point, 3)) {
+                  finishBoundary();
+                  return;
+                }
+                if (isSamePlace(boundaryDraft[boundaryDraft.length - 1], point)) return;
+                setBoundaryDraft((prev) => [...prev, point]);
                 return;
               }
               if (drawTool === "queue-line" && queueDraftId) {
-                setQueueDraft((prev) => [...prev, { lat: latLng.getLat(), lng: latLng.getLng() }]);
+                if (isSamePlace(queueDraft[queueDraft.length - 1], point)) return;
+                setQueueDraft((prev) => [...prev, point]);
+              }
+            }}
+            /*
+              화면설계서 FE-05: Enter 또는 첫 꼭짓점 근처 더블클릭으로 그리기를 끝낸다.
+              더블클릭은 클릭 두 번이 먼저 오므로, 같은 자리 중복 점은 위에서 걸러 둔다.
+            */
+            onDoubleClick={() => {
+              if (editingLocked || panOverride) return;
+              if (drawTool === "polygon" || drawTool === "line") {
+                finishDraftShape();
+                return;
+              }
+              if (drawTool === "boundary") {
+                finishBoundary();
+                return;
+              }
+              if (drawTool === "queue-line" && queueDraft.length >= 2) {
+                queueSaveMutation.mutate(queueDraft);
               }
             }}
           >
@@ -1763,6 +1893,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
                       setCheckedIds(new Set([booth.id]));
                       setEditingBoothId(booth.id);
+                      setBoothListOpen(false);
                     }}
                     /*
                       아이콘을 넣으면서 히트 영역을 넉넉히 잡는다(28px). 점(12px)만 할 때는
@@ -1822,7 +1953,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                   style={{ position: "static" }}
                   initialName={selectedBooth.name}
                   typeLabel={NODE_TYPE_LABEL[selectedBooth.nodeType] ?? "시설"}
-                  parentZoneName={selectedBoothZone?.name ?? ""}
+                  parentZoneName={selectedBoothParentName}
                   confirmLabel={selectedBooth.isNew ? "등록" : "수정"}
                   hideCancel
                   onChangeNodeType={(nodeType) => changePinNodeType(selectedBooth, nodeType)}
@@ -2006,6 +2137,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         {boothListOpen ? "부스 목록 닫기" : "부스 목록"}
       </Button>
       <div
+        ref={boothListRef}
         className={cn(
           "absolute top-44 bottom-4 left-4 w-[calc(100%-80px)] lg:top-10 lg:bottom-10 lg:left-8 lg:block lg:w-72",
           !boothListOpen && "hidden",
@@ -2070,13 +2202,45 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             {ungroupedBooths.map((booth) => renderBoothRow(booth, { indent: false }))}
           </div>
 
-          {/* 직접 그린 폴리곤·라인 — 부스 핀과 성격이 달라 구역 목록과 분리해 보여 준다. */}
-          {shapes.length > 0 ? (
+          {/* 구역 폴리곤은 그 안에 든 부스를 하위로 품는다(화면설계서 4-6). */}
+          {polygonShapes.length > 0 ? (
+            <div className="flex flex-col gap-1 border-t border-zinc-200 pt-3">
+              {polygonShapes.map((shape) => {
+                const members = booths.filter(
+                  (booth) => shapeIdByBoothId.get(booth.id) === shape.id,
+                );
+                return (
+                  <ZoneListItem
+                    key={shape.id}
+                    name={shape.name}
+                    count={members.length}
+                    expanded={expandedZoneIds.has(shape.id)}
+                    checked={selectedShapeId === shape.id}
+                    selected={selectedShapeId === shape.id}
+                    onToggleExpanded={() => toggleZoneExpanded(shape.id)}
+                    onCheckedChange={(checked) => {
+                      setEditingBoothId(null);
+                      setSelectedShapeId(checked ? shape.id : null);
+                    }}
+                    onSelect={() => {
+                      setEditingBoothId(null);
+                      setSelectedShapeId(shape.id);
+                    }}
+                  >
+                    {members.map((booth) => renderBoothRow(booth, { indent: true }))}
+                  </ZoneListItem>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* 라인은 부스를 품지 않으므로 따로 나열한다. */}
+          {lineShapes.length > 0 ? (
             <div className="flex flex-col gap-1 border-t border-zinc-200 pt-3">
               <p className="body-small-bold text-zinc-950">
-                도형 <span className="text-primary">{shapes.length}</span>
+                도형 <span className="text-primary">{lineShapes.length}</span>
               </p>
-              {shapes.map((shape) => (
+              {lineShapes.map((shape) => (
                 <button
                   key={shape.id}
                   type="button"
@@ -2214,7 +2378,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         />
       </div>
 
-      <div className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10">
+      <div
+        ref={mapToolsRef}
+        className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10"
+      >
         <div className="flex flex-col gap-1">
           <IconButton
             icon={<RadiobuttonIcon className="size-5" />}
@@ -2363,6 +2530,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           >
             {queueSaveMutation.isPending ? "저장 중..." : "대기줄 저장"}
           </Button>
+          {/* 이미 저장된 경로가 있을 때만. 서버에는 빈 배열이 곧 삭제다. */}
+          {selectedQueue?.path && selectedQueue.path.length > 0 ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={queueSaveMutation.isPending}
+              onClick={() => setClearQueuePathOpen(true)}
+            >
+              경로 지우기
+            </Button>
+          ) : null}
           {queueSaveError ? <p className="body-caption text-error">{queueSaveError}</p> : null}
         </div>
       ) : null}
@@ -2450,6 +2628,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       ) : null}
 
+      <ConfirmDialog
+        open={clearQueuePathOpen}
+        onOpenChange={setClearQueuePathOpen}
+        title="대기줄 경로를 지우시겠습니까?"
+        description="지도에서 줄이 사라집니다. 줄끝 위치와 대기시간은 그대로 남습니다."
+        cancelLabel="취소"
+        confirmLabel="지우기"
+        confirmVariant="destructive"
+        confirmPending={queueSaveMutation.isPending}
+        onConfirm={() => {
+          setClearQueuePathOpen(false);
+          queueSaveMutation.mutate([]);
+        }}
+      />
       <ConfirmDialog
         open={removePamphletOpen}
         onOpenChange={setRemovePamphletOpen}
