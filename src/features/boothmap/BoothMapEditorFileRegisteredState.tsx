@@ -756,7 +756,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setSelectedShapeId(null);
   }
 
-  function finishBoundary() {
+  /*
+    Enter 단축키가 이 함수를 키보드 effect 안에서 부른다. 일반 함수로 두면 effect가
+    다시 걸리지 않는 동안 boundaryDraft가 시작값(빈 배열)에 묶여, 꼭짓점을 찍어 놓고
+    Enter를 눌러도 "점이 부족하다"며 완료되지 않는다. draft를 의존성으로 묶어 둔다.
+  */
+  const finishBoundary = useCallback(() => {
     const error = validateBoundary(boundaryDraft);
     if (error) {
       toast.error(error);
@@ -765,7 +770,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setSiteBoundary(uniqueVertices(withoutClosingDuplicate(boundaryDraft)));
     setBoundaryDraft([]);
     setDrawTool("select");
-  }
+  }, [boundaryDraft]);
 
   function loadOverlayFile(file: File) {
     const url = URL.createObjectURL(file);
@@ -1091,6 +1096,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     closeDialogOpen,
     deleteBoundaryOpen,
     drawTool,
+    finishBoundary,
     queueDraft,
     queueSaveMutation,
     saveDialogOpen,

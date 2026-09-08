@@ -5,7 +5,12 @@ import type {
   FestivalQueueList,
   UpdateQueueTailRequest,
 } from "@/features/staffMap/types";
-import type { FestivalCongestion, FestivalDashboard, FestivalOperationSuggestions } from "./types";
+import type {
+  FestivalCongestion,
+  FestivalDashboard,
+  FestivalOperationsMap,
+  FestivalOperationSuggestions,
+} from "./types";
 
 export async function getFestivalDashboard(festivalId: string): Promise<FestivalDashboard> {
   const { data } = await adminApiClient.get<ApiResponse<FestivalDashboard>>(
@@ -51,6 +56,14 @@ export async function updateQueueTailAsAdmin(
   const { data } = await adminApiClient.patch<ApiResponse<FestivalQueue>>(
     `/festivals/${festivalId}/operations/queues/${queueId}`,
     request,
+  );
+  return data.data;
+}
+
+/** 현장 운영 지도(부지 경계·팜플렛·승인 부스). 운영자도 볼 수 있는 읽기 전용 계약이다. */
+export async function getFestivalOperationsMap(festivalId: string): Promise<FestivalOperationsMap> {
+  const { data } = await adminApiClient.get<ApiResponse<FestivalOperationsMap>>(
+    `/festivals/${festivalId}/operations/map`,
   );
   return data.data;
 }

@@ -9,7 +9,7 @@ import { isAxiosError } from "axios";
 import { Button } from "@/components/ui/Button";
 import { MapMetric } from "@/components/map/MapMetric";
 import { MapZoomControls } from "@/components/map/MapZoomControls";
-import { getCurrentMap, getMapEditor } from "@/features/boothmap/api";
+import { getCurrentMap } from "@/features/boothmap/api";
 import { boothsToQueuePathItems } from "@/features/boothmap/QueuePathLayer";
 import { presentationBoundary, presentationOverlay } from "@/features/boothmap/mapPresentation";
 import { primaryFestivalCenter } from "@/features/boothmap/mapCenter";
@@ -21,6 +21,7 @@ import {
   getFestivalCongestion,
   getFestivalDashboard,
   getFestivalOperationSuggestions,
+  getFestivalOperationsMap,
   getFestivalQueues,
 } from "./api";
 import { AiSuggestionPanel } from "./AiSuggestionPanel";
@@ -61,10 +62,16 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     // 지도 미등록 또는 좌표 누락은 재시도로 해결되지 않는다.
     retry: false,
   });
-  const editorQuery = useQuery({
-    queryKey: ["map-editor", festivalId, mapDataQuery.data?.mapId],
-    enabled: Boolean(mapDataQuery.data?.mapId),
-    queryFn: () => getMapEditor(festivalId, mapDataQuery.data!.mapId),
+  /*
+    부지 경계·팜플렛은 운영 지도 조회로 받는다. 편집기 API(.../maps/{mapId}/editor)는
+    총괄관리자 전용 편집 계약이라 운영자(제2관리자·외부업자)에게는 권한이 없고,
+    저장 전 초안 노드까지 통째로 내려온다. 대시보드는 보기만 하면 된다.
+  */
+  const operationsMapQuery = useQuery({
+    queryKey: ["festival-operations-map", festivalId],
+    enabled: festivalQuery.isSuccess,
+    queryFn: () => getFestivalOperationsMap(festivalId),
+    retry: false,
   });
   const dashboardQuery = useQuery({
     queryKey: ["festival-dashboard", festivalId],
@@ -156,8 +163,8 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     );
     return boothsToQueuePathItems(mapBooths, queueByBoothId);
   }, [mapBooths, queuesQuery.data?.queues]);
-  const pamphlet = presentationOverlay(editorQuery.data?.presentation);
-  const siteBoundary = presentationBoundary(editorQuery.data?.presentation);
+  const pamphlet = presentationOverlay(operationsMapQuery.data?.presentation);
+  const siteBoundary = presentationBoundary(operationsMapQuery.data?.presentation);
   const suggestions = (suggestionsQuery.data?.suggestions ?? [])
     .filter((suggestion) => !dismissedSuggestionIds.includes(suggestion.suggestionId))
     .map((suggestion) => ({ ...suggestion, id: suggestion.suggestionId }));

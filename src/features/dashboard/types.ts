@@ -1,3 +1,4 @@
+import type { MapPresentation } from "@/features/boothmap/types";
 export type CongestionLevel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface Booth {
@@ -109,4 +110,24 @@ export interface DashboardZone {
   name: string;
   sortOrder: number;
   boothNodeIds: string[];
+}
+
+/**
+ * 현장 운영 지도 조회(`GET /festivals/{festivalId}/operations/map`) 응답.
+ *
+ * 대시보드는 편집기 API(`.../maps/{mapId}/editor`)를 부르지 않는다. 그쪽은 총괄관리자
+ * 전용 편집 계약이라 운영자에게는 권한이 없고, 초안 노드까지 통째로 내려온다.
+ */
+export interface FestivalOperationsMap {
+  mapId: string;
+  editRevision: number;
+  mapKind?: string | null;
+  presentation?: MapPresentation | null;
+  booths: {
+    boothId: number;
+    nodeId: string | null;
+    name: string;
+    lat: number;
+    lng: number;
+  }[];
 }
