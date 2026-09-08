@@ -95,7 +95,12 @@ function QueuePathItemView({
       {path ? (
         <Polyline path={path} strokeWeight={4} strokeColor="#fd7e14" strokeOpacity={0.95} />
       ) : null}
-      {showWaitLabel ? (
+      {/*
+        대기시간을 아직 모르는 부스에는 라벨을 달지 않는다. 「정보 없음」이 부스마다 붙으면
+        지도가 그 글씨로 덮인다 — 부스를 막 만든 직후에는 전부 미상이라 더 심하다.
+        0분은 실제 값이므로 그대로 보여 준다.
+      */}
+      {showWaitLabel && queue.waitMinutes != null ? (
         <CustomOverlayMap position={labelPosition} yAnchor={1} zIndex={18} clickable={false}>
           <span className="body-caption mb-1 rounded-md bg-white px-1.5 py-0.5 text-zinc-950 shadow-sm">
             {formatWaitMinutes(queue.waitMinutes)}
