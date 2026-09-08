@@ -238,6 +238,18 @@ export interface BoothMapQueueLine {
 
 export type BoothMapObject = BoothMapShape | BoothMapQueueLine;
 
+/**
+ * 부스맵 공개 응답.
+ *
+ * `publishedBoothCount`는 방문객 지도에 실제로 그려질 부스 수다. 서버는 검수가 끝난
+ * 부스 노드만 세므로, 화면에 찍혀 있는 핀 수와 다를 수 있다.
+ */
+export interface PublishRoadmapResponse {
+  roadmapStatus: RoadmapStatus;
+  publishedVersion: number;
+  publishedBoothCount: number;
+}
+
 /** 지도 부스 노드 일괄 승인 응답. 이번에 새로 승인된 부스만 담긴다. */
 export interface ApproveBoothsResponse {
   approvedCount: number;
