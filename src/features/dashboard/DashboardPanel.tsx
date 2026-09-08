@@ -13,6 +13,7 @@ import { getCurrentMap } from "@/features/boothmap/api";
 import { boothsToQueuePathItems } from "@/features/boothmap/QueuePathLayer";
 import { presentationBoundary, presentationOverlay } from "@/features/boothmap/mapPresentation";
 import { primaryFestivalCenter } from "@/features/boothmap/mapCenter";
+import type { NodeType } from "@/features/boothmap/types";
 import { getManagedFestival } from "@/features/festivals/api";
 import { formatDday } from "@/features/festivals/dateFormat";
 import { getApiErrorMessage } from "@/lib/api/httpError";
@@ -115,6 +116,12 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
         .filter((booth) => booth.nodeId)
         .map((booth) => [booth.boothId, booth.nodeId as string]),
     );
+    // 노드 유형도 운영 지도에만 있다. 대시보드 응답의 부스는 언제나 승인 부스라 유형이 없다.
+    const nodeTypeByBoothId = new Map(
+      (operationsMapQuery.data?.booths ?? [])
+        .filter((booth) => booth.nodeType)
+        .map((booth) => [booth.boothId, booth.nodeType as NodeType]),
+    );
     return dashboardBooths.map((dashboardBooth) => {
       const congestion = congestionByBoothId.get(dashboardBooth.boothId);
       const queue = queueByBoothId.get(dashboardBooth.boothId);
@@ -122,6 +129,7 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
         boothId: String(dashboardBooth.boothId),
         queueId: queue?.queueId,
         name: dashboardBooth.boothName,
+        nodeType: nodeTypeByBoothId.get(dashboardBooth.boothId),
         zoneId:
           zoneIdByNodeId.get(
             dashboardBooth.roadmapNodePublicId ?? nodeIdByBoothId.get(dashboardBooth.boothId) ?? "",
@@ -244,6 +252,7 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
       {dashboardMapCenter ? (
         <BoothMapView
           booths={mapBooths}
+          facilities={operationsMapQuery.data?.facilities ?? []}
           selectedBooth={activeBooth}
           onSelectBooth={setSelectedBooth}
           zoomStep={zoomStep}

@@ -89,6 +89,7 @@ export function StaffMapPanel() {
     <div className="relative min-h-0 flex-1">
       <BoothMapView
         booths={festival.booths}
+        facilities={festival.facilities}
         selectedBooth={selectedBooth}
         onSelectBooth={(booth) => {
           setSelectedBoothId(booth?.boothId ?? null);
