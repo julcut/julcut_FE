@@ -167,6 +167,7 @@ export interface RoadmapZoneChangeRequest {
 export interface SaveRoadmapDraftRequest {
   presentation?: {
     clearBoundary?: boolean;
+    clearOverlay?: boolean;
     boundary?: MapBoundaryPresentation;
     overlay?: OverlayAnchor & {
       assetId: string;

@@ -214,6 +214,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const kakaoMapRef = useRef<kakao.maps.Map | null>(null);
   const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [removePamphletOpen, setRemovePamphletOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   /*
     지도 위에서 끌고 있는 핀의 임시 위치. 끄는 동안에는 booths를 건드리지 않고 이 값만
@@ -275,6 +276,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [boundaryDraft, setBoundaryDraft] = useState<LatLng[]>([]);
   const [deleteBoundaryOpen, setDeleteBoundaryOpen] = useState(false);
   const [pamphlet, setPamphlet] = useState<LocalPamphletOverlay | null>(null);
+  /** 서버에 저장된 팜플렛이 있는지. 화면에서 지웠을 때 삭제 요청을 보낼지 판단한다. */
+  const serverHasOverlay = Boolean(editorQuery.data?.presentation?.overlay);
   const [queueDraft, setQueueDraft] = useState<LatLng[]>([]);
   const [queueDraftId, setQueueDraftId] = useState<string | null>(null);
   const [queueSaveError, setQueueSaveError] = useState<string | null>(null);
@@ -406,6 +409,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           ...(siteBoundary
             ? { boundary: { geometryType: "POLYGON", schemaVersion: "2.0", points: siteBoundary } }
             : { clearBoundary: true }),
+          /*
+            팜플렛을 지운 채로 저장하면 서버에도 지워야 한다. 아무것도 안 보내면
+            서버는 "변경 없음"으로 보고 기존 이미지를 그대로 들고 있어, 화면에서
+            지웠는데 새로고침하면 되살아난다.
+          */
           ...(overlay?.assetId
             ? {
                 overlay: {
@@ -416,7 +424,9 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                   clipToBoundary: Boolean(siteBoundary && overlay.clipToBoundary),
                 },
               }
-            : {}),
+            : serverHasOverlay
+              ? { clearOverlay: true }
+              : {}),
         },
         nodes,
         zones: zones
@@ -2088,6 +2098,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
           >
             현재 지도 중심으로 이동
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 w-full"
+            onClick={() => setRemovePamphletOpen(true)}
+          >
+            팜플렛 제거
+          </Button>
           <label className="body-caption mt-3 flex flex-col gap-1 text-zinc-950">
             폭(m)
             <input
@@ -2143,6 +2161,30 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       ) : null}
 
+      <ConfirmDialog
+        open={removePamphletOpen}
+        onOpenChange={setRemovePamphletOpen}
+        title="팜플렛을 제거하시겠습니까?"
+        description={
+          serverHasOverlay
+            ? "저장하면 서버에 올라간 팜플렛도 지도에서 내려갑니다."
+            : "아직 저장하지 않은 팜플렛이라 바로 사라집니다."
+        }
+        cancelLabel="취소"
+        confirmLabel="제거"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          setRemovePamphletOpen(false);
+          setPamphlet((current) => {
+            // 로컬에서 고른 이미지면 만들어 둔 objectURL도 함께 반납한다.
+            if (current?.localObjectUrl) {
+              localImageFiles.current.delete(current.localObjectUrl);
+              URL.revokeObjectURL(current.localObjectUrl);
+            }
+            return null;
+          });
+        }}
+      />
       <ConfirmDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
