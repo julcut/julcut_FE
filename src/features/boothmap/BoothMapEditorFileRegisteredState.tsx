@@ -62,7 +62,7 @@ import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
-import type { CreateCoordinateMapResponse, MapAnalysisStatusResponse, NodeType } from "./types";
+import type { CreateCoordinateMapResponse, NodeType } from "./types";
 import { useEditHistory } from "./useEditHistory";
 import { useMapAnalysis } from "./useMapAnalysis";
 import { ZoneListItem } from "./ZoneListItem";
