@@ -12,6 +12,9 @@ import {
   FileIcon,
   HamburgerMenuIcon,
   HomeIcon,
+  ImageIcon,
+  CornersIcon,
+  ClockIcon,
   RadiobuttonIcon,
   ResetIcon,
   RulerHorizontalIcon,
@@ -24,20 +27,43 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { MapSidePanel } from "@/components/map/MapSidePanel";
 import { MapZoomControls } from "@/components/map/MapZoomControls";
+import { getFestivalDashboard, getFestivalQueues } from "@/features/dashboard/api";
 import { getManagedFestival } from "@/features/festivals/api";
+import { updateQueueTail } from "@/features/staffMap/api";
 import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/httpError";
 import { useConsoleUiStore } from "@/store/consoleUiStore";
 import { cn } from "@/lib/utils";
-import { ensureCoordinateMap, getMapEditor, replaceFestivalMap, saveMapEditor } from "./api";
+import {
+  ensureCoordinateMap,
+  getMapEditor,
+  replaceFestivalMap,
+  saveMapEditor,
+  uploadMapOverlay,
+} from "./api";
+import { isPanModifier, isTypingTarget } from "./editorGestures";
 import {
   boothIdsToNodeIds,
   boothMapPinsToNodeChanges,
-  nodeToLocalBooth,
-  nodeToLocalShape,
+  partitionEditorNodes,
   SHAPE_MINIMUM_POINTS,
   type LocalBoothPin,
   type LocalMapShape,
+  type PreservedNode,
 } from "./geometryWgs84";
+import type { LatLng } from "./latLng";
+import {
+  presentationBoundary,
+  presentationOverlay,
+  type LocalPamphletOverlay,
+} from "./mapPresentation";
+import { cornersFromAnchor } from "./overlayProjection";
+import { PamphletOverlay } from "./PamphletOverlay";
+import {
+  uniqueVertices,
+  validateBoundary,
+  withoutClosingDuplicate,
+} from "./polygonGeometry";
+import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
@@ -124,10 +150,27 @@ function centroidOf(members: LocalBoothPin[]) {
   };
 }
 
+function applyPartitionedNodes(
+  nodes: Parameters<typeof partitionEditorNodes>[0],
+  setBooths: (pins: LocalBoothPin[]) => void,
+  setShapes: (shapes: LocalMapShape[]) => void,
+  setPreservedNodes: (nodes: PreservedNode[]) => void,
+) {
+  const partitioned = partitionEditorNodes(nodes);
+  setBooths(partitioned.pins);
+  setShapes(partitioned.shapes);
+  setPreservedNodes(partitioned.preserved);
+  if (partitioned.preserved.length > 0) {
+    toast.warning("일부 도형은 이 지도에서 그리지 않고 그대로 보존합니다.", {
+      description: partitioned.preserved[0]?.reason,
+    });
+  }
+}
+
 const POPOVER_ANCHORS = { xAnchor: 0.5, yAnchor: 1 } as const;
 
-/** 지도에서 고를 수 있는 그리기 도구. 설계서 "5. 오버레이 버튼 영역2"의 핀·폴리곤·라인이다. */
-type DrawTool = "select" | "pin" | "polygon" | "line";
+/** 지도에서 고를 수 있는 그리기 도구. 핀·폴리곤·라인은 노드, 경계·대기줄은 표시 설정이다. */
+type DrawTool = "select" | "pin" | "polygon" | "line" | "boundary" | "queue-line";
 
 /** 폴리곤·라인의 기본 노드 유형. 세부 유형은 도형을 고른 뒤 팝오버에서 바꾼다. */
 const SHAPE_NODE_TYPE: Record<"polygon" | "line", NodeType> = {
@@ -170,7 +213,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [mapLoading, mapError] = useKakaoMapLoader();
   const mapWrapperRef = useRef<HTMLDivElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const overlayFileInputRef = useRef<HTMLInputElement>(null);
+  const localImageFiles = useRef(new Map<string, File>());
   const kakaoMapRef = useRef<kakao.maps.Map | null>(null);
+  const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   /*
@@ -202,6 +248,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     queryFn: () => getMapEditor(festivalId, mapQuery.data!.mapId),
     enabled: !!mapQuery.data?.mapId,
   });
+  const dashboardQuery = useQuery({
+    queryKey: ["festival-dashboard", festivalId],
+    queryFn: () => getFestivalDashboard(festivalId),
+  });
+  const queuesQuery = useQuery({
+    queryKey: ["festival-queues", festivalId],
+    queryFn: () => getFestivalQueues(festivalId),
+  });
   const festivalCenter = useMemo(
     () => primaryFestivalCenter(festivalQuery.data?.locations),
     [festivalQuery.data?.locations],
@@ -220,6 +274,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [zones, setZones] = useState<LocalZone[]>([]);
   /** 지도 위에 직접 그린 폴리곤·라인. 서버의 POLYGON/POLYLINE 노드와 1:1로 대응한다. */
   const [shapes, setShapes] = useState<LocalMapShape[]>([]);
+  const [preservedNodes, setPreservedNodes] = useState<PreservedNode[]>([]);
+  const [siteBoundary, setSiteBoundary] = useState<LatLng[] | null>(null);
+  const [boundaryDraft, setBoundaryDraft] = useState<LatLng[]>([]);
+  const [deleteBoundaryOpen, setDeleteBoundaryOpen] = useState(false);
+  const [pamphlet, setPamphlet] = useState<LocalPamphletOverlay | null>(null);
+  const [queueDraft, setQueueDraft] = useState<LatLng[]>([]);
+  const [queueDraftId, setQueueDraftId] = useState<string | null>(null);
+  const [queueSaveError, setQueueSaveError] = useState<string | null>(null);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [modifierHeld, setModifierHeld] = useState(false);
   /** 지금 찍고 있는 도형의 꼭짓점들. "그리기 완료"를 눌러야 shapes로 넘어간다. */
   const [draftPoints, setDraftPoints] = useState<{ lat: number; lng: number }[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
@@ -313,12 +377,52 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         throw new Error("지도 정보를 불러오지 못했습니다.");
       }
       // 부스를 전부 지운 경우에도 삭제 내역은 서버에 보내야 하므로, 지울 노드가 있으면 통과시킨다.
-      if (booths.length === 0 && shapes.length === 0 && deletedNodeIds.length === 0) {
-        throw new Error("저장할 부스가 없습니다.");
+      const nodes = boothMapPinsToNodeChanges(booths, deletedNodeIds, shapes, preservedNodes);
+      if (nodes.length === 0) {
+        throw new Error(
+          "현재 서버는 노드 없이 경계·팜플렛만 저장할 수 없습니다. 핀을 추가한 뒤 저장해 주세요.",
+        );
+      }
+      if (siteBoundary) {
+        const error = validateBoundary(siteBoundary);
+        if (error) throw new Error(error);
+      }
+      let overlay = pamphlet;
+      if (overlay && !cornersFromAnchor(overlay.anchor, overlay.imageWidth, overlay.imageHeight)) {
+        throw new Error("팜플렛의 위치·폭·회전 값을 확인해 주세요.");
+      }
+      const file = overlay?.localObjectUrl
+        ? localImageFiles.current.get(overlay.localObjectUrl)
+        : undefined;
+      if (file && overlay && !overlay.assetId) {
+        const latest = await getMapEditor(festivalId, mapQuery.data.mapId);
+        if (latest.editRevision !== editRevision)
+          throw new Error(
+            "다른 곳에서 수정되어 이미지 업로드를 중단했습니다. 초안을 보관한 뒤 최신본을 확인해 주세요.",
+          );
+        const uploaded = await uploadMapOverlay(festivalId, mapQuery.data.mapId, file);
+        overlay = { ...overlay, ...uploaded, imageUrl: uploaded.imageUrl ?? overlay.imageUrl };
+        setPamphlet(overlay);
       }
       return saveMapEditor(festivalId, mapQuery.data.mapId, {
         baseRevision: editRevision,
-        nodes: boothMapPinsToNodeChanges(booths, deletedNodeIds, shapes),
+        presentation: {
+          ...(siteBoundary
+            ? { boundary: { geometryType: "POLYGON", schemaVersion: "2.0", points: siteBoundary } }
+            : { clearBoundary: true }),
+          ...(overlay?.assetId
+            ? {
+                overlay: {
+                  assetId: overlay.assetId,
+                  ...overlay.anchor,
+                  opacity: overlay.opacity,
+                  visible: overlay.visible,
+                  clipToBoundary: Boolean(siteBoundary && overlay.clipToBoundary),
+                },
+              }
+            : {}),
+        },
+        nodes,
         zones: zones
           .map((zone, sortOrder) => ({
             zoneId: zone.id,
@@ -334,16 +438,9 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       setDeletedNodeIds([]);
       await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
       const editor = await getMapEditor(festivalId, mapQuery.data!.mapId);
-      setBooths(
-        editor.nodes
-          .map(nodeToLocalBooth)
-          .filter((booth): booth is LocalBoothPin => booth !== null),
-      );
-      setShapes(
-        editor.nodes
-          .map(nodeToLocalShape)
-          .filter((shape): shape is LocalMapShape => shape !== null),
-      );
+      applyPartitionedNodes(editor.nodes, setBooths, setShapes, setPreservedNodes);
+      setSiteBoundary(presentationBoundary(editor.presentation));
+      setPamphlet(presentationOverlay(editor.presentation));
       setZones(
         (editor.zones ?? []).map((zone) => ({
           id: zone.zoneId,
@@ -359,29 +456,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       setSavedSnapshot(null);
       // 저장 직후 화면 상태를 "저장된 상태"로 다시 기준 잡는다.
       setSeedToken((token) => token + 1);
-      toast.success("부스맵이 저장되었습니다.");
+      toast.success("부스맵과 표시 설정이 저장되었습니다.");
     },
     onError: async (error) => {
       if (getApiErrorCode(error) === 40910) {
         toast.error("다른 곳에서 수정되었습니다.", {
-          description: "최신 데이터를 다시 불러옵니다.",
+          description:
+            "작성 중인 초안은 유지했습니다. 내용을 별도로 보관한 뒤 페이지를 새로고침해 최신본과 비교해 주세요.",
         });
-        await queryClient.invalidateQueries({ queryKey: ["map-editor", festivalId] });
-        if (mapQuery.data?.mapId) {
-          const editor = await getMapEditor(festivalId, mapQuery.data.mapId);
-          setEditRevision(editor.editRevision);
-          setBooths(
-            editor.nodes
-              .map(nodeToLocalBooth)
-              .filter((booth): booth is LocalBoothPin => booth !== null),
-          );
-          setShapes(
-            editor.nodes
-              .map(nodeToLocalShape)
-              .filter((shape): shape is LocalMapShape => shape !== null),
-          );
-          setDeletedNodeIds([]);
-        }
         return;
       }
       toast.error(getApiErrorMessage(error, "부스맵 저장에 실패했습니다."));
@@ -463,17 +545,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   // 같은 지도·같은 seedToken에서는 한 번만 채워 사용자의 편집을 덮어쓰지 않는다.
   const seedKey = editorQuery.data ? `${editorQuery.data.mapId}:${seedToken}` : null;
   if (editorQuery.data && seedKey !== null && seedKey !== seededKey) {
-    setBooths(
-      editorQuery.data.nodes
-        .map(nodeToLocalBooth)
-        .filter((booth): booth is LocalBoothPin => booth !== null),
+    applyPartitionedNodes(
+      editorQuery.data.nodes,
+      setBooths,
+      setShapes,
+      setPreservedNodes,
     );
-    setShapes(
-      editorQuery.data.nodes
-        .map(nodeToLocalShape)
-        .filter((shape): shape is LocalMapShape => shape !== null),
-    );
+    setSiteBoundary(presentationBoundary(editorQuery.data.presentation));
+    setPamphlet(presentationOverlay(editorQuery.data.presentation));
     setDraftPoints([]);
+    setBoundaryDraft([]);
+    setQueueDraft([]);
     setSelectedShapeId(null);
     setEditRevision(editorQuery.data.editRevision);
     setZones(
@@ -492,8 +574,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
 
   // 저장하지 않은 편집이 있는지. 브라우저 뒤로가기·탭 닫기로 작업이 사라지는 것을 막는 데 쓴다.
   const currentSnapshot = useMemo(
-    () => JSON.stringify({ booths, shapes, zones, deletedNodeIds }),
-    [booths, shapes, zones, deletedNodeIds],
+    () => JSON.stringify({ booths, shapes, zones, deletedNodeIds, siteBoundary, pamphlet }),
+    [booths, shapes, zones, deletedNodeIds, siteBoundary, pamphlet],
   );
   // 서버 데이터를 새로 채울 때마다(지도 교체·AI 분석 완료) 기준 스냅샷도 다시 잡는다.
   // 그러지 않으면 AI가 뿌린 부스가 곧바로 "저장하지 않은 편집"으로 잡힌다.
@@ -511,11 +593,15 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
       shapes?: LocalMapShape[];
       zones: LocalZone[];
       deletedNodeIds: string[];
+      siteBoundary?: LatLng[] | null;
+      pamphlet?: LocalPamphletOverlay | null;
     };
     setBooths(restored.booths);
     setShapes(restored.shapes ?? []);
     setZones(restored.zones);
     setDeletedNodeIds(restored.deletedNodeIds);
+    setSiteBoundary(restored.siteBoundary ?? null);
+    setPamphlet(restored.pamphlet ?? null);
     setDraftPoints([]);
     setSelectedShapeId(null);
     // 되돌린 결과에 없는 부스를 가리키고 있을 수 있어 선택 상태는 비운다.
@@ -679,6 +765,164 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setSelectedShapeId(null);
   }
 
+  function finishBoundary() {
+    const error = validateBoundary(boundaryDraft);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setSiteBoundary(uniqueVertices(withoutClosingDuplicate(boundaryDraft)));
+    setBoundaryDraft([]);
+    setDrawTool("select");
+  }
+
+  function loadOverlayFile(file: File) {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      localImageFiles.current.set(url, file);
+      const center = kakaoMapRef.current?.getCenter();
+      const centerLatitude = center?.getLat() ?? mapCenter?.lat ?? 37.5;
+      const centerLongitude = center?.getLng() ?? mapCenter?.lng ?? 127;
+      const anchor = {
+        centerLatitude,
+        centerLongitude,
+        groundWidthMeters: 80,
+        rotationDegrees: 0,
+      };
+      const corners = cornersFromAnchor(anchor, image.width, image.height);
+      if (!corners) {
+        URL.revokeObjectURL(url);
+        toast.error("팜플렛 이미지를 배치할 수 없습니다.");
+        return;
+      }
+      setPamphlet({
+        imageUrl: url,
+        imageWidth: image.width,
+        imageHeight: image.height,
+        anchor,
+        corners,
+        opacity: 0.7,
+        visible: true,
+        clipToBoundary: Boolean(siteBoundary),
+        localObjectUrl: url,
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      toast.error("팜플렛 이미지를 읽지 못했습니다.");
+    };
+    image.src = url;
+  }
+
+  function updatePamphletAnchor(
+    patch: Partial<LocalPamphletOverlay["anchor"]> &
+      Partial<Pick<LocalPamphletOverlay, "opacity" | "visible" | "clipToBoundary">>,
+  ) {
+    setPamphlet((prev) => {
+      if (!prev) return prev;
+      const anchor = {
+        centerLatitude: patch.centerLatitude ?? prev.anchor.centerLatitude,
+        centerLongitude: patch.centerLongitude ?? prev.anchor.centerLongitude,
+        groundWidthMeters: patch.groundWidthMeters ?? prev.anchor.groundWidthMeters,
+        rotationDegrees: patch.rotationDegrees ?? prev.anchor.rotationDegrees,
+      };
+      const corners = cornersFromAnchor(anchor, prev.imageWidth, prev.imageHeight) ?? prev.corners;
+      return {
+        ...prev,
+        ...patch,
+        anchor,
+        corners,
+        clipToBoundary: patch.clipToBoundary ?? prev.clipToBoundary,
+      };
+    });
+  }
+
+  const relatedBoothIdByPinId = useMemo(() => {
+    const map = new Map<string, number>();
+    booths.forEach((booth) => {
+      if (booth.relatedBoothId) {
+        map.set(booth.id, booth.relatedBoothId);
+        return;
+      }
+      const dashboardBooth = dashboardQuery.data?.booths.find(
+        (item) => item.roadmapNodePublicId === booth.nodeId,
+      );
+      if (dashboardBooth) map.set(booth.id, dashboardBooth.boothId);
+    });
+    return map;
+  }, [booths, dashboardQuery.data?.booths]);
+  const queueByBoothId = useMemo(() => {
+    const map = new Map<string, { queueId: string; path: LatLng[] | null }>();
+    (queuesQuery.data?.queues ?? []).forEach((queue) => map.set(String(queue.boothId), queue));
+    return map;
+  }, [queuesQuery.data?.queues]);
+  const selectedOpsBoothId =
+    selectedBooth && relatedBoothIdByPinId.has(selectedBooth.id)
+      ? relatedBoothIdByPinId.get(selectedBooth.id)!
+      : null;
+  const selectedQueue =
+    selectedOpsBoothId != null ? queueByBoothId.get(String(selectedOpsBoothId)) : undefined;
+  const canEditQueue = Boolean(selectedQueue && selectedBooth?.nodeType === "BOOTH");
+  const panOverride = spaceHeld || modifierHeld;
+  const queuePathItems = useMemo(() => {
+    const items = boothsToQueuePathItems(
+      booths
+        .filter((booth) => relatedBoothIdByPinId.has(booth.id))
+        .map((booth) => {
+          const opsId = relatedBoothIdByPinId.get(booth.id)!;
+          const dashboardBooth = dashboardQuery.data?.booths.find((item) => item.boothId === opsId);
+          return {
+            boothId: String(opsId),
+            lat: booth.lat,
+            lng: booth.lng,
+            waitMinutes: dashboardBooth?.waitMinutes ?? null,
+          };
+        }),
+      queueByBoothId,
+    );
+    if (drawTool === "queue-line" && queueDraft.length >= 2 && queueDraftId) {
+      return items.map((item) =>
+        item.queueId === queueDraftId ? { ...item, path: queueDraft } : item,
+      );
+    }
+    return items;
+  }, [
+    booths,
+    dashboardQuery.data?.booths,
+    queueByBoothId,
+    queueDraft,
+    relatedBoothIdByPinId,
+    queueDraftId,
+    drawTool,
+  ]);
+  const queueSaveMutation = useMutation({
+    mutationFn: async (path: LatLng[]) => {
+      if (!queueDraftId) throw new Error("승인된 부스 대기열이 없습니다.");
+      if (path.length < 2 || path.length > 500)
+        throw new Error("대기줄은 2~500개의 점이 필요합니다.");
+      const tail = path[path.length - 1];
+      return updateQueueTail(festivalId, queueDraftId, {
+        tailLatitude: tail.lat,
+        tailLongitude: tail.lng,
+        path,
+      });
+    },
+    onSuccess: async () => {
+      setQueueSaveError(null);
+      setQueueDraft([]);
+      setQueueDraftId(null);
+      setDrawTool("select");
+      await queryClient.invalidateQueries({ queryKey: ["festival-queues", festivalId] });
+      toast.success("대기줄이 저장되었습니다.");
+    },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, "대기줄 저장에 실패했습니다.");
+      setQueueSaveError(message);
+      toast.error(message);
+    },
+  });
+
   /** 끌고 있는 핀은 아직 booths에 반영되지 않았으므로 임시 위치를 대신 쓴다. */
   function pinPositionOf(booth: LocalBoothPin) {
     return draggingPin?.id === booth.id
@@ -694,7 +938,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
    */
   function startPinDrag(booth: LocalBoothPin, event: React.PointerEvent<HTMLElement>) {
     // 핀 추가 모드에서는 지도 클릭이 곧 새 핀이라 이동을 받지 않는다.
-    if (editingLocked || drawTool === "pin" || event.button !== 0) return;
+    if (editingLocked || panOverride || drawTool === "pin" || event.button !== 0) return;
     const map = kakaoMapRef.current;
     const wrapper = mapWrapperRef.current;
     if (!map || !wrapper || !window.kakao?.maps) return;
@@ -783,10 +1027,118 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   useEffect(() => {
     const wrapper = mapWrapperRef.current;
     if (!wrapper) return;
-    const handleWheel = (event: WheelEvent) => event.preventDefault();
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (!(event.ctrlKey || event.metaKey)) return;
+      setZoomStep((step) => (event.deltaY > 0 ? Math.min(step + 1, 4) : Math.max(step - 1, -2)));
+    };
     wrapper.addEventListener("wheel", handleWheel, { passive: false });
     return () => wrapper.removeEventListener("wheel", handleWheel);
   }, [mapLoading, mapError]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        isTypingTarget(event.target) ||
+        saveDialogOpen ||
+        closeDialogOpen ||
+        deleteBoundaryOpen ||
+        saveMutation.isPending ||
+        queueSaveMutation.isPending
+      )
+        return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        setSpaceHeld(true);
+        return;
+      }
+      if (event.ctrlKey || event.metaKey) setModifierHeld(true);
+      if (event.key === "Escape") {
+        cancelDraftShape();
+        setBoundaryDraft([]);
+        setQueueDraft([]);
+        setDrawTool("select");
+        return;
+      }
+      if (event.key === "Enter" && drawTool === "boundary") {
+        event.preventDefault();
+        finishBoundary();
+        return;
+      }
+      if (event.key === "Enter" && drawTool === "queue-line" && queueDraft.length >= 2) {
+        event.preventDefault();
+        queueSaveMutation.mutate(queueDraft);
+        return;
+      }
+      if ((event.key === "Backspace" || event.key === "Delete") && drawTool === "boundary") {
+        event.preventDefault();
+        setBoundaryDraft((prev) => prev.slice(0, -1));
+        return;
+      }
+      if ((event.key === "Backspace" || event.key === "Delete") && drawTool === "queue-line") {
+        event.preventDefault();
+        setQueueDraft((prev) => prev.slice(0, -1));
+      }
+    }
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.code === "Space") setSpaceHeld(false);
+      if (!event.ctrlKey && !event.metaKey) setModifierHeld(false);
+    }
+    function resetModifiers() {
+      setSpaceHeld(false);
+      setModifierHeld(false);
+    }
+    window.addEventListener("blur", resetModifiers);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("blur", resetModifiers);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [
+    closeDialogOpen,
+    deleteBoundaryOpen,
+    drawTool,
+    queueDraft,
+    queueSaveMutation,
+    saveDialogOpen,
+    saveMutation.isPending,
+  ]);
+
+  useEffect(() => {
+    const mapId = mapQuery.data?.mapId;
+    const assetId = pamphlet?.assetId;
+    const expiresAt = Date.parse(pamphlet?.imageUrlExpiresAt ?? "");
+    if (!mapId || !assetId || !Number.isFinite(expiresAt)) return;
+    let cancelled = false;
+    const timer = window.setTimeout(
+      async () => {
+        try {
+          const editor = await getMapEditor(festivalId, mapId);
+          const fresh = editor.presentation?.overlay;
+          if (cancelled || fresh?.assetId !== assetId || !fresh.imageUrl) return;
+          setPamphlet((prev) =>
+            prev?.assetId === assetId
+              ? {
+                  ...prev,
+                  imageUrl: fresh.imageUrl!,
+                  imageUrlExpiresAt: fresh.imageUrlExpiresAt,
+                }
+              : prev,
+          );
+        } catch {
+          if (!cancelled)
+            toast.error("팜플렛 이미지 주소 갱신에 실패했습니다. 편집 내용은 유지됩니다.");
+        }
+      },
+      Math.min(2_147_483_647, Math.max(10_000, expiresAt - Date.now() - 30_000)),
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [festivalId, mapQuery.data?.mapId, pamphlet?.assetId, pamphlet?.imageUrlExpiresAt]);
 
   function renderBoothRow(booth: LocalBoothPin, { indent }: { indent: boolean }) {
     return (
@@ -940,11 +1292,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             className="h-full w-full"
             onCreate={(map) => {
               kakaoMapRef.current = map;
+              setKakaoMap(map);
               map.setMinLevel(1);
               map.setMaxLevel(8);
             }}
             onClick={(_target, mouseEvent) => {
-              if (editingLocked) return;
+              if (editingLocked || panOverride) return;
               const latLng = mouseEvent.latLng;
               if (!latLng) return;
               if (drawTool === "pin") {
@@ -953,9 +1306,49 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               }
               if (drawTool === "polygon" || drawTool === "line") {
                 addDraftPoint(latLng.getLat(), latLng.getLng());
+                return;
+              }
+              if (drawTool === "boundary") {
+                setBoundaryDraft((prev) => [...prev, { lat: latLng.getLat(), lng: latLng.getLng() }]);
+                return;
+              }
+              if (drawTool === "queue-line" && queueDraftId) {
+                setQueueDraft((prev) => [...prev, { lat: latLng.getLat(), lng: latLng.getLng() }]);
               }
             }}
           >
+            <PamphletOverlay
+              map={kakaoMap}
+              imageUrl={pamphlet?.imageUrl ?? null}
+              corners={pamphlet?.corners ?? null}
+              boundary={siteBoundary}
+              clipToBoundary={Boolean(pamphlet?.clipToBoundary && siteBoundary)}
+              opacity={pamphlet?.opacity ?? 0.7}
+              visible={Boolean(pamphlet?.visible)}
+              interactive
+              onImageError={() =>
+                toast.error("팜플렛 이미지를 표시하지 못했습니다. 핀과 경계는 그대로 둡니다.")
+              }
+            />
+            <QueuePathLayer queues={queuePathItems} />
+            {siteBoundary && siteBoundary.length >= 3 ? (
+              <Polygon
+                path={siteBoundary}
+                fillColor="#18181b"
+                fillOpacity={0.04}
+                strokeColor="#18181b"
+                strokeWeight={3}
+                strokeOpacity={0.9}
+              />
+            ) : null}
+            {boundaryDraft.length >= 2 ? (
+              <Polyline
+                path={boundaryDraft}
+                strokeColor="#18181b"
+                strokeWeight={2}
+                strokeStyle="shortdash"
+              />
+            ) : null}
             {pendingGroupMembers.length >= 2 ? (
               <>
                 <Polygon
@@ -1071,7 +1464,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                     */
                     onPointerEnter={() => {
                       pinHoveredRef.current = true;
-                      if (!editingLocked && drawTool !== "pin") {
+                      if (!editingLocked && !panOverride && drawTool !== "pin") {
                         kakaoMapRef.current?.setDraggable(false);
                       }
                     }}
@@ -1085,6 +1478,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       // 끌어서 옮긴 직후의 click은 선택이 아니다.
                       if (pinDraggedRef.current) {
                         pinDraggedRef.current = false;
+                        return;
+                      }
+                      if (isPanModifier(event)) {
+                        setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
+                        setCheckedIds(new Set([booth.id]));
+                        setEditingBoothId(null);
+                        return;
+                      }
+                      if (event.shiftKey) {
+                        toggleChecked(booth.id);
                         return;
                       }
                       setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
@@ -1452,6 +1855,17 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               event.currentTarget.value = "";
             }}
           />
+          <input
+            ref={overlayFileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) loadOverlayFile(file);
+              event.currentTarget.value = "";
+            }}
+          />
           <Button
             type="button"
             variant="outline"
@@ -1465,6 +1879,16 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               : hasBlueprintImage
                 ? "다른 배치도로 다시 분석"
                 : "배치도 이미지로 AI 분석"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            icon={<ImageIcon />}
+            disabled={editingLocked}
+            title={editLockReason ?? undefined}
+            onClick={() => overlayFileInputRef.current?.click()}
+          >
+            팜플렛 올리기
           </Button>
           <Button
             type="button"
@@ -1542,7 +1966,39 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               onClick={() => startShapeTool("line")}
             />
           </span>
+          <span title={editLockReason ?? "부지 경계 — 지도를 눌러 꼭짓점을 찍습니다"}>
+            <IconButton
+              icon={<CornersIcon className="size-5" />}
+              aria-label="부지 경계"
+              aria-pressed={drawTool === "boundary"}
+              disabled={editingLocked}
+              className={cn("text-zinc-950", drawTool === "boundary" && "ring-2 ring-primary")}
+              onClick={() => {
+                setDrawTool((tool) => (tool === "boundary" ? "select" : "boundary"));
+                setPinTypeMenuOpen(false);
+                setDraftPoints([]);
+                setQueueDraft([]);
+              }}
+            />
+          </span>
+          <span title={canEditQueue ? undefined : "승인된 부스만 대기줄을 그릴 수 있습니다."}>
+            <IconButton
+              icon={<ClockIcon className="size-5" />}
+              aria-label="대기줄 추가"
+              aria-pressed={drawTool === "queue-line"}
+              disabled={!canEditQueue || editingLocked}
+              className={cn("text-zinc-950", drawTool === "queue-line" && "ring-2 ring-primary")}
+              onClick={() => {
+                setDrawTool((tool) => (tool === "queue-line" ? "select" : "queue-line"));
+                setPinTypeMenuOpen(false);
+                setDraftPoints([]);
+                setQueueDraft(selectedQueue?.path ?? []);
+                setQueueDraftId(selectedQueue?.queueId ?? null);
+              }}
+            />
+          </span>
         </div>
+        <p className="body-caption max-w-40 text-center text-zinc-950">Ctrl/⌘ 드래그: 지도 이동</p>
         <MapZoomControls
           onZoomIn={() => setZoomStep((step) => Math.max(step - 1, -2))}
           onZoomOut={() => setZoomStep((step) => Math.min(step + 1, 4))}
@@ -1579,10 +2035,123 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       ) : null}
 
+      {drawTool === "boundary" ? (
+        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:bottom-10">
+          <Button type="button" variant="outline" onClick={cancelDraftShape}>
+            취소
+          </Button>
+          <Button type="button" variant="primary" onClick={finishBoundary}>
+            경계 완료
+          </Button>
+          {siteBoundary ? (
+            <Button type="button" variant="destructive" onClick={() => setDeleteBoundaryOpen(true)}>
+              경계 삭제
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {drawTool === "queue-line" ? (
+        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-md lg:bottom-10">
+          <Button type="button" variant="outline" onClick={cancelDraftShape}>
+            취소
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={queueDraft.length < 2 || queueSaveMutation.isPending}
+            onClick={() => queueSaveMutation.mutate(queueDraft)}
+          >
+            {queueSaveMutation.isPending ? "저장 중..." : "대기줄 저장"}
+          </Button>
+          {queueSaveError ? <p className="body-caption text-error">{queueSaveError}</p> : null}
+        </div>
+      ) : null}
+
+      {pamphlet ? (
+        <div className="absolute top-28 left-4 w-72 rounded-lg bg-white p-4 shadow-md lg:top-10 lg:left-[23rem]">
+          <p className="body-small-bold text-zinc-950">팜플렛 배치</p>
+          <p className="body-caption mt-1 text-zinc-500">
+            이미지만 움직이며 부스 좌표는 유지됩니다.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const center = kakaoMap?.getCenter();
+              if (center)
+                updatePamphletAnchor({
+                  centerLatitude: center.getLat(),
+                  centerLongitude: center.getLng(),
+                });
+            }}
+          >
+            현재 지도 중심으로 이동
+          </Button>
+          <label className="body-caption mt-3 flex flex-col gap-1 text-zinc-950">
+            폭(m)
+            <input
+              type="number"
+              min={10}
+              max={100000}
+              value={pamphlet.anchor.groundWidthMeters}
+              onChange={(event) =>
+                updatePamphletAnchor({ groundWidthMeters: Number(event.target.value) })
+              }
+              className="body-small rounded-md border border-zinc-200 px-2 py-1"
+            />
+          </label>
+          <label className="body-caption mt-2 flex flex-col gap-1 text-zinc-950">
+            회전(도)
+            <input
+              type="number"
+              value={pamphlet.anchor.rotationDegrees}
+              onChange={(event) =>
+                updatePamphletAnchor({ rotationDegrees: Number(event.target.value) })
+              }
+              className="body-small rounded-md border border-zinc-200 px-2 py-1"
+            />
+          </label>
+          <label className="body-caption mt-2 flex flex-col gap-1 text-zinc-950">
+            투명도
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={pamphlet.opacity}
+              onChange={(event) => updatePamphletAnchor({ opacity: Number(event.target.value) })}
+            />
+          </label>
+          <label className="body-caption mt-2 flex items-center gap-2 text-zinc-950">
+            <input
+              type="checkbox"
+              checked={pamphlet.visible}
+              onChange={(event) => updatePamphletAnchor({ visible: event.target.checked })}
+            />
+            표시
+          </label>
+          <label className="body-caption mt-1 flex items-center gap-2 text-zinc-950">
+            <input
+              type="checkbox"
+              checked={pamphlet.clipToBoundary}
+              disabled={!siteBoundary}
+              onChange={(event) => updatePamphletAnchor({ clipToBoundary: event.target.checked })}
+            />
+            경계로 자르기
+          </label>
+        </div>
+      ) : null}
+
       <ConfirmDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         title="저장하시겠습니까?"
+        description={
+          pamphlet?.localObjectUrl && !pamphlet.assetId
+            ? "팜플렛 업로드 후 지도 설정을 저장합니다. 설정 저장이 실패해도 업로드된 이미지는 서버에 남을 수 있습니다."
+            : undefined
+        }
         confirmLabel="저장"
         confirmVariant="primary"
         confirmPending={saveMutation.isPending}
@@ -1615,6 +2184,19 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         confirmLabel="나가기"
         confirmVariant="destructive"
         onConfirm={() => router.push(`/console/festivals/${festivalId}`)}
+      />
+      <ConfirmDialog
+        open={deleteBoundaryOpen}
+        onOpenChange={setDeleteBoundaryOpen}
+        title="경계를 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          setSiteBoundary(null);
+          setBoundaryDraft([]);
+          setDeleteBoundaryOpen(false);
+          setPamphlet((prev) => (prev ? { ...prev, clipToBoundary: false } : prev));
+        }}
       />
     </div>
   );

@@ -83,8 +83,8 @@ export function MapInfoPopover({
   /** 확인 버튼 라벨. 그룹(구역) 생성 직후 재편집 흐름에서는 "등록"으로 쓴다. */
   confirmLabel?: string;
   /**
-   * true면 "취소" 버튼을 숨기고 삭제 버튼을 outline·flex-1로 확인 버튼과 나란히 두며,
-   * 삭제/확인 클릭 시 바로 실행하지 않고 확인 모달을 한 번 더 띄운다(구역 재편집 흐름).
+   * true면 "취소" 버튼을 숨기고 삭제 버튼을 outline·flex-1로 확인 버튼과 나란히 둔다.
+   * 삭제는 확인 모달을 띄우고, 수정/등록은 바로 적용한다.
    */
   hideCancel?: boolean;
   /** API 객체 유형에 따라 기본 유형 라벨을 덮어쓴다. */
@@ -95,20 +95,19 @@ export function MapInfoPopover({
   const [name, setName] = useState(initialName);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [typeCategory, setTypeCategory] = useState<MapObjectTypeCategory | null>(null);
-  const [pendingConfirm, setPendingConfirm] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
-      if (pendingConfirm || pendingDelete) return;
+      if (pendingDelete) return;
       if (popoverRef.current?.contains(event.target as Node)) return;
       setTypeMenuOpen(false);
       setTypeCategory(null);
       onCancel();
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape" || pendingConfirm || pendingDelete) return;
+      if (event.key !== "Escape" || pendingDelete) return;
       setTypeMenuOpen(false);
       setTypeCategory(null);
       onCancel();
@@ -119,7 +118,7 @@ export function MapInfoPopover({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onCancel, pendingConfirm, pendingDelete]);
+  }, [onCancel, pendingDelete]);
 
   return (
     <div ref={popoverRef} className="absolute z-20" style={style}>
@@ -249,9 +248,7 @@ export function MapInfoPopover({
           <Button
             type="button"
             variant="primary"
-            onClick={() =>
-              hideCancel ? setPendingConfirm(true) : onConfirm(name.trim() || initialName)
-            }
+            onClick={() => onConfirm(name.trim() || initialName)}
             className="flex-1"
           >
             {confirmLabel}
@@ -269,19 +266,6 @@ export function MapInfoPopover({
           onConfirm={() => {
             setPendingDelete(false);
             onDelete();
-          }}
-        />
-      ) : null}
-      {hideCancel ? (
-        <ConfirmDialog
-          open={pendingConfirm}
-          onOpenChange={setPendingConfirm}
-          title={`${confirmLabel}하시겠습니까?`}
-          confirmLabel={confirmLabel}
-          confirmVariant="primary"
-          onConfirm={() => {
-            setPendingConfirm(false);
-            onConfirm(name.trim() || initialName);
           }}
         />
       ) : null}

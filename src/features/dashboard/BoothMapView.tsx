@@ -1,9 +1,15 @@
 "use client";
 
-import { Map, CustomOverlayMap } from "react-kakao-maps-sdk";
+import { useEffect, useRef, useState } from "react";
+import { Map, CustomOverlayMap, Polygon } from "react-kakao-maps-sdk";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { IconButton } from "@/components/ui/IconButton";
+import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
+import { PamphletOverlay } from "@/features/boothmap/PamphletOverlay";
+import { QueuePathLayer, type QueuePathItem } from "@/features/boothmap/QueuePathLayer";
+import type { LocalPamphletOverlay } from "@/features/boothmap/mapPresentation";
+import type { LatLng } from "@/features/boothmap/latLng";
 import type { Booth } from "./types";
 
 /** 지도 마커 위에 뜨는 부스 상세정보 말풍선. 아래쪽 중앙에서 마커를 향해 뾰족한 꼬리가 이어진다. */
@@ -30,7 +36,7 @@ function BoothPopup({ booth, onClose }: { booth: Booth; onClose: () => void }) {
             혼잡도 {booth.congestionLevel ?? "미입력"}
           </p>
           <p className="body-caption text-zinc-500">
-            예상 대기시간 {booth.waitMinutes == null ? "미입력" : `${booth.waitMinutes}분`}
+            예상 대기시간 {formatWaitMinutes(booth.waitMinutes)}
           </p>
         </div>
       </div>
@@ -46,6 +52,10 @@ export function BoothMapView({
   zoomStep = 0,
   center,
   showPopup = true,
+  queues = [],
+  pamphlet = null,
+  boundary = null,
+  onZoomByWheel,
 }: {
   booths: Booth[];
   selectedBooth: Booth | null;
@@ -55,8 +65,26 @@ export function BoothMapView({
   center: { lat: number; lng: number };
   /** 마커를 누르면 상세 말풍선을 띄울지 여부. 선택 정보를 하단바로 보여주는 화면에서는 끈다. */
   showPopup?: boolean;
+  queues?: QueuePathItem[];
+  pamphlet?: LocalPamphletOverlay | null;
+  boundary?: LatLng[] | null;
+  onZoomByWheel?: (direction: 1 | -1) => void;
 }) {
   const [loading, error] = useKakaoMapLoader();
+  const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (!(event.ctrlKey || event.metaKey)) return;
+      onZoomByWheel?.(event.deltaY > 0 ? 1 : -1);
+    };
+    wrapper.addEventListener("wheel", handleWheel, { passive: false });
+    return () => wrapper.removeEventListener("wheel", handleWheel);
+  }, [onZoomByWheel, loading, error]);
 
   if (!process.env.NEXT_PUBLIC_KAKAO_MAP_KEY) {
     return (
@@ -93,60 +121,83 @@ export function BoothMapView({
       : null;
 
   return (
-    <Map
-      center={center}
-      isPanto={false}
-      level={2 + zoomStep}
-      scrollwheel={false}
-      className="absolute inset-0 isolate"
-      // react-kakao-maps-sdk의 minLevel/maxLevel prop은 내부적으로 서로 뒤바뀐 채
-      // kakao.maps.Map.setMinLevel/setMaxLevel에 전달되는 버그가 있어(v1.2.1),
-      // onCreate에서 직접 정확한 인자로 호출한다.
-      onCreate={(map) => {
-        map.setMinLevel(2);
-        map.setMaxLevel(8);
-      }}
-    >
-      {pinnedBooths.map((booth) => {
-        const isSelected = selectedBooth?.boothId === booth.boothId;
-        return (
-          <CustomOverlayMap
-            key={booth.boothId}
-            position={{ lat: booth.lat, lng: booth.lng }}
-            clickable
-            zIndex={isSelected ? 20 : 10}
-          >
-            <button
-              type="button"
-              title={booth.name}
-              aria-label={booth.name}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectBooth(isSelected ? null : booth);
-              }}
-              className="flex size-3 items-center justify-center"
+    <div ref={wrapperRef} className="absolute inset-0 isolate">
+      <Map
+        center={center}
+        isPanto={false}
+        level={2 + zoomStep}
+        scrollwheel={false}
+        className="h-full w-full"
+        // react-kakao-maps-sdk의 minLevel/maxLevel prop은 내부적으로 서로 뒤바뀐 채
+        // kakao.maps.Map.setMinLevel/setMaxLevel에 전달되는 버그가 있어(v1.2.1),
+        // onCreate에서 직접 정확한 인자로 호출한다.
+        onCreate={(map) => {
+          setKakaoMap(map);
+          map.setMinLevel(2);
+          map.setMaxLevel(8);
+        }}
+      >
+        <PamphletOverlay
+          map={kakaoMap}
+          imageUrl={pamphlet?.imageUrl ?? null}
+          corners={pamphlet?.corners ?? null}
+          boundary={boundary}
+          clipToBoundary={Boolean(pamphlet?.clipToBoundary && boundary)}
+          opacity={pamphlet?.opacity ?? 0.7}
+          visible={Boolean(pamphlet?.visible)}
+        />
+        <QueuePathLayer queues={queues} />
+        {boundary && boundary.length >= 3 ? (
+          <Polygon
+            path={boundary}
+            fillColor="#18181b"
+            fillOpacity={0.04}
+            strokeColor="#18181b"
+            strokeWeight={3}
+            strokeOpacity={0.9}
+          />
+        ) : null}
+        {pinnedBooths.map((booth) => {
+          const isSelected = selectedBooth?.boothId === booth.boothId;
+          return (
+            <CustomOverlayMap
+              key={booth.boothId}
+              position={{ lat: booth.lat, lng: booth.lng }}
+              clickable
+              zIndex={isSelected ? 20 : 10}
             >
-              {isSelected ? (
-                <span className="flex size-3 items-center justify-center rounded-full bg-point-600/25">
-                  <span className="size-1 rounded-full bg-point-600" />
-                </span>
-              ) : (
-                <span className="size-3 rounded-full bg-point-600 shadow-sm" />
-              )}
-            </button>
-          </CustomOverlayMap>
-        );
-      })}
+              <button
+                type="button"
+                title={booth.name}
+                aria-label={booth.name}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectBooth(isSelected ? null : booth);
+                }}
+                className="flex size-3 items-center justify-center"
+              >
+                {isSelected ? (
+                  <span className="flex size-3 items-center justify-center rounded-full bg-point-600/25">
+                    <span className="size-1 rounded-full bg-point-600" />
+                  </span>
+                ) : (
+                  <span className="size-3 rounded-full bg-point-600 shadow-sm" />
+                )}
+              </button>
+            </CustomOverlayMap>
+          );
+        })}
 
-      {showPopup && pinnedSelectedBooth ? (
-        <CustomOverlayMap
-          position={{ lat: pinnedSelectedBooth.lat, lng: pinnedSelectedBooth.lng }}
-          yAnchor={1}
-          zIndex={30}
-        >
-          <BoothPopup booth={pinnedSelectedBooth} onClose={() => onSelectBooth(null)} />
-        </CustomOverlayMap>
-      ) : null}
-    </Map>
+        {showPopup && pinnedSelectedBooth ? (
+          <CustomOverlayMap
+            position={{ lat: pinnedSelectedBooth.lat, lng: pinnedSelectedBooth.lng }}
+            yAnchor={1}
+            zIndex={30}
+          >
+            <BoothPopup booth={pinnedSelectedBooth} onClose={() => onSelectBooth(null)} />
+          </CustomOverlayMap>
+        ) : null}
+      </Map>
+    </div>
   );
 }

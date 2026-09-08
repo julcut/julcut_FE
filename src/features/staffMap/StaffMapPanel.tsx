@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { MapZoomControls } from "@/components/map/MapZoomControls";
 import { BoothMapView } from "@/features/dashboard/BoothMapView";
+import { boothsToQueuePathItems } from "@/features/boothmap/QueuePathLayer";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { QueueUpdateSheet } from "./QueueUpdateSheet";
 import { StaffBoothBar } from "./StaffBoothBar";
@@ -96,6 +97,8 @@ export function StaffMapPanel() {
         showPopup={false}
         zoomStep={zoomStep}
         center={festival.mapCenter}
+        queues={boothsToQueuePathItems(festival.booths, festival.queueByBoothId)}
+        onZoomByWheel={(direction) => setZoomStep((step) => step + direction)}
       />
 
       <MapZoomControls

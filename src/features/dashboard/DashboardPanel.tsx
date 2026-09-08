@@ -9,7 +9,12 @@ import { isAxiosError } from "axios";
 import { Button } from "@/components/ui/Button";
 import { MapMetric } from "@/components/map/MapMetric";
 import { MapZoomControls } from "@/components/map/MapZoomControls";
-import { getCurrentMap } from "@/features/boothmap/api";
+import { getCurrentMap, getMapEditor } from "@/features/boothmap/api";
+import { boothsToQueuePathItems } from "@/features/boothmap/QueuePathLayer";
+import {
+  presentationBoundary,
+  presentationOverlay,
+} from "@/features/boothmap/mapPresentation";
 import { primaryFestivalCenter } from "@/features/boothmap/mapCenter";
 import { getManagedFestival } from "@/features/festivals/api";
 import { formatDday } from "@/features/festivals/dateFormat";
@@ -58,6 +63,11 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     queryFn: () => getCurrentMap(festivalId),
     // 지도 미등록 또는 좌표 누락은 재시도로 해결되지 않는다.
     retry: false,
+  });
+  const editorQuery = useQuery({
+    queryKey: ["map-editor", festivalId, mapDataQuery.data?.mapId],
+    enabled: Boolean(mapDataQuery.data?.mapId),
+    queryFn: () => getMapEditor(festivalId, mapDataQuery.data!.mapId),
   });
   const dashboardQuery = useQuery({
     queryKey: ["festival-dashboard", festivalId],
@@ -143,6 +153,14 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
     queryClient.invalidateQueries({ queryKey: ["festival-queues", festivalId] });
   }, [queryClient, festivalId]);
   const dashboardMapCenter = mapDataQuery.data?.center ?? mapCenter;
+  const queuePathItems = useMemo(() => {
+    const queueByBoothId = new Map(
+      (queuesQuery.data?.queues ?? []).map((queue) => [String(queue.boothId), queue]),
+    );
+    return boothsToQueuePathItems(mapBooths, queueByBoothId);
+  }, [mapBooths, queuesQuery.data?.queues]);
+  const pamphlet = presentationOverlay(editorQuery.data?.presentation);
+  const siteBoundary = presentationBoundary(editorQuery.data?.presentation);
   const suggestions = (suggestionsQuery.data?.suggestions ?? [])
     .filter((suggestion) => !dismissedSuggestionIds.includes(suggestion.suggestionId))
     .map((suggestion) => ({ ...suggestion, id: suggestion.suggestionId }));
@@ -211,6 +229,10 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
           onSelectBooth={setSelectedBooth}
           zoomStep={zoomStep}
           center={dashboardMapCenter}
+          queues={queuePathItems}
+          pamphlet={pamphlet}
+          boundary={siteBoundary}
+          onZoomByWheel={(direction) => setZoomStep((step) => step + direction)}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-50 px-8">

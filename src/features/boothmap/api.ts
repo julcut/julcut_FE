@@ -12,6 +12,21 @@ import type {
   SaveRoadmapDraftResponse,
 } from "./types";
 
+export async function uploadMapOverlay(festivalId: string, mapId: string, image: File) {
+  const form = new FormData();
+  form.append("image", image);
+  const { data } = await adminApiClient.post<
+    ApiResponse<{
+      assetId: string;
+      imageUrl: string;
+      imageUrlExpiresAt?: string | null;
+      imageWidth: number;
+      imageHeight: number;
+    }>
+  >(`/festivals/${festivalId}/maps/${mapId}/overlay`, form);
+  return data.data;
+}
+
 export async function createCoordinateMap(
   festivalId: string,
   request: CreateCoordinateMapRequest,

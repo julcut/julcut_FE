@@ -4,6 +4,7 @@ import { UpdateIcon } from "@radix-ui/react-icons";
 import { MapMetric } from "@/components/map/MapMetric";
 import { Button } from "@/components/ui/Button";
 import { CongestionText } from "@/components/ui/CongestionBadge";
+import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import type { Booth } from "@/features/dashboard/types";
 
 const METRIC_LABEL_CLASSES = "body-caption [&_svg]:size-3.5";
@@ -75,13 +76,7 @@ export function StaffBoothBar({
           description="대기 줄의 끝이 마지막으로 기록된 구역입니다."
         />
         <MapMetric
-          value={
-            booth.waitMinutes === undefined ? (
-              <span className="body-small text-zinc-400">미입력</span>
-            ) : (
-              `${booth.waitMinutes} 분`
-            )
-          }
+          value={formatWaitMinutes(booth.waitMinutes ?? null)}
           valueClassName="body-small-bold"
           labelClassName={METRIC_LABEL_CLASSES}
           label="예상 대기시간"

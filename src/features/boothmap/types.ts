@@ -28,7 +28,7 @@ export type NodeSource = "AI" | "ADMIN";
 
 export type MapAnalysisJobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
 
-/** IMAGE map(schema 1.0): geometry는 이미지 대비 0~1 정규화 값이다. */
+/** IMAGE map(schema 1.0): geometry는 이미지 대비 0~1 정규화 값이다. 카카오 WGS84와 섞지 않는다. */
 export type RectangleGeometry = {
   x: number;
   y: number;
@@ -40,7 +40,47 @@ export type PointGeometry = { x: number; y: number };
 export type PointGeometryWgs84 = { lat: number; lng: number };
 export type PolyGeometry = { points: { x: number; y: number }[] };
 export type PolyGeometryWgs84 = { points: { lat: number; lng: number }[] };
+/** schema 1.0 이미지 정규화 도형. WGS84는 `PointGeometryWgs84` / `PolyGeometryWgs84`를 쓴다. */
 export type NodeGeometry = RectangleGeometry | PointGeometry | PolyGeometry;
+
+export interface OverlayAnchor {
+  centerLatitude: number;
+  centerLongitude: number;
+  groundWidthMeters: number;
+  rotationDegrees: number;
+}
+
+export interface OverlayCorners {
+  topLeft: PointGeometryWgs84;
+  topRight: PointGeometryWgs84;
+  bottomRight: PointGeometryWgs84;
+  bottomLeft: PointGeometryWgs84;
+}
+
+export interface MapOverlayPresentation {
+  assetId?: string | null;
+  imageUrl: string | null;
+  imageUrlExpiresAt?: string | null;
+  imageWidth: number;
+  imageHeight: number;
+  anchor: OverlayAnchor;
+  corners?: OverlayCorners | null;
+  opacity: number;
+  visible: boolean;
+  clipToBoundary: boolean;
+}
+
+export interface MapBoundaryPresentation {
+  geometryType: "POLYGON";
+  schemaVersion: "2.0";
+  points: PointGeometryWgs84[];
+}
+
+/** 지도 표시 설정 조회 응답. */
+export interface MapPresentation {
+  boundary: MapBoundaryPresentation | null;
+  overlay: MapOverlayPresentation | null;
+}
 
 export interface NodeResponse {
   nodeId: string;
@@ -54,6 +94,8 @@ export interface NodeResponse {
   reviewStatus: NodeReviewStatus;
   sortOrder: number;
   geometrySchemaVersion?: string;
+  /** 승인된 운영 부스 ID. 아직 서버가 안 내려 주면 없다. */
+  relatedBoothId?: number | null;
 }
 
 export interface MapAnalysisStatusResponse {
@@ -81,6 +123,8 @@ export interface MapEditorResponse {
   nodes: NodeResponse[];
   zones?: RoadmapZoneResponse[];
   center?: { lat: number; lng: number } | null;
+  mapKind?: string;
+  presentation?: MapPresentation | null;
 }
 
 export interface CreateCoordinateMapResponse {
@@ -121,6 +165,16 @@ export interface RoadmapZoneChangeRequest {
 }
 
 export interface SaveRoadmapDraftRequest {
+  presentation?: {
+    clearBoundary?: boolean;
+    boundary?: MapBoundaryPresentation;
+    overlay?: OverlayAnchor & {
+      assetId: string;
+      opacity: number;
+      visible: boolean;
+      clipToBoundary: boolean;
+    };
+  };
   baseRevision: number;
   nodes: NodeChangeRequest[];
   zones?: RoadmapZoneChangeRequest[];

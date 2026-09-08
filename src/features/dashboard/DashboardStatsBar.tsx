@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { distanceInMeters } from "@/features/staffMap/utils";
 import { getApiErrorMessage } from "@/lib/api/httpError";
+import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import { updateQueueTailAsAdmin } from "./api";
 import type { Booth, BoothZone } from "./types";
 
@@ -123,7 +124,7 @@ function BoothQueueUpdateBar({
           </div>
           <p className="body-caption text-zinc-500">
             혼잡도 {booth.congestionLevel ?? "미입력"} · 예상 대기시간{" "}
-            {booth.waitMinutes == null ? "미입력" : `${booth.waitMinutes}분`}
+            {formatWaitMinutes(booth.waitMinutes)}
           </p>
         </div>
       </div>
