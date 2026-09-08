@@ -5,11 +5,8 @@ export interface FieldStaff {
   loginId: string;
   name: string;
   phoneNumber: string;
-  /**
-   * 근무구역(근무부서). 백엔드 `FieldStaffResponse`에 아직 없는 필드라 지금은
-   * 항상 undefined로 내려온다 — 백엔드가 컬럼을 추가하면 그대로 표시된다.
-   */
-  department?: string;
+  /** 근무구역(근무부서). 등록하지 않은 계정은 null로 내려온다. */
+  department: string | null;
   validFrom: string;
   validUntil: string;
   status: FieldStaffStatus;
@@ -18,6 +15,8 @@ export interface FieldStaff {
 export interface CreateFieldStaffRequest {
   loginId: string;
   name: string;
+  /** 근무구역. 생략하면 값 없이 만들어진다. 최대 100자. */
+  department?: string;
   phoneNumber: string;
 }
 
@@ -25,6 +24,7 @@ export interface CreateFieldStaffResult {
   staffId: string;
   loginId: string;
   name: string;
+  department: string | null;
   phoneNumber: string;
   validFrom: string;
   validUntil: string;
@@ -34,6 +34,11 @@ export interface CreateFieldStaffResult {
 
 export interface UpdateFieldStaffRequest {
   name: string;
+  /**
+   * 근무구역. 생략하면 기존 값을 유지하고, 빈 문자열을 보내면 값을 지운다.
+   * 값을 지울 의도가 없다면 반드시 기존 값을 그대로 실어 보내야 한다.
+   */
+  department?: string;
   phoneNumber: string;
 }
 

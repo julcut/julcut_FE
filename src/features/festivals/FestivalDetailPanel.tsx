@@ -13,8 +13,14 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { primaryFestivalCenter } from "@/features/boothmap/mapCenter";
-import { getApiErrorMessage } from "@/lib/api/httpError";
-import { deleteFestival, getManagedFestival, searchFestivalSeries, updateFestival } from "./api";
+import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/httpError";
+import {
+  deleteFestival,
+  getManagedFestival,
+  searchFestivalSeries,
+  updateFestival,
+  updateFestivalVisitorCountInputMode,
+} from "./api";
 import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
 import { SearchDialog, type SearchDialogState } from "./SearchDialog";
 import type {
@@ -23,6 +29,11 @@ import type {
   FestivalSeriesSearchResult,
   FestivalVisitorCountInputMode,
 } from "./types";
+
+/** 방문 인원이 이미 입력된 축제에서 집계 방식을 바꾸려 할 때 백엔드가 내려주는 코드. */
+const VISITOR_MODE_CHANGE_FORBIDDEN_CODE = 40917;
+const VISITOR_MODE_CHANGE_FORBIDDEN_MESSAGE =
+  "이미 입력된 방문 인원이 있어 집계 방식을 바꿀 수 없습니다.";
 
 export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
   const router = useRouter();
@@ -71,8 +82,8 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
     setFestivalSearchOpen(false);
   }
   const updateMutation = useMutation({
-    mutationFn: () => {
-      if (!festival) return Promise.resolve();
+    mutationFn: async () => {
+      if (!festival) return;
       const locations: FestivalLocationRequest[] = festival.locations.map((location) => ({
         ...location,
         detailAddress: location.primary
@@ -86,16 +97,23 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         longitude: location.longitude ?? undefined,
         boundaryGeometry: location.boundaryGeometry ?? undefined,
       }));
-      const selectedVisitorCountInputMode =
-        visitorCountInputMode ??
-        (festival.visitorCountInputMode === "UNSET" ? undefined : festival.visitorCountInputMode);
-      return updateFestival(festivalId, {
+      /*
+        집계 방식은 축제 수정에 실어 보내지 않는다. 이 PATCH는 `locations`를 전체
+        치환하는 데다, 방문 인원이 이미 입력된 축제면 집계 방식 때문에 축제명·기간
+        같은 나머지 수정까지 함께 막힌다. 방식이 실제로 달라졌을 때만 전용 API로 따로 보낸다.
+      */
+      if (
+        visitorCountInputMode !== null &&
+        visitorCountInputMode !== festival.visitorCountInputMode
+      ) {
+        await updateFestivalVisitorCountInputMode(festivalId, visitorCountInputMode);
+      }
+      await updateFestival(festivalId, {
         name: name ?? festival.festivalName ?? "",
         description: description ?? festival.description ?? "",
         locations,
         startDate: toIsoDate(startDate ?? toDisplayDate(festival.startDate ?? "")),
         endDate: toIsoDate(endDate ?? toDisplayDate(festival.endDate ?? "")),
-        visitorCountInputMode: selectedVisitorCountInputMode,
       });
     },
     onSuccess: () => {
@@ -110,7 +128,12 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
       queryClient.invalidateQueries({ queryKey: ["managed-festivals"] });
       toast.success("축제 정보를 수정했습니다.");
     },
-    onError: (error) => toast.error(getApiErrorMessage(error, "축제 수정에 실패했습니다.")),
+    onError: (error) =>
+      toast.error(
+        getApiErrorCode(error) === VISITOR_MODE_CHANGE_FORBIDDEN_CODE
+          ? VISITOR_MODE_CHANGE_FORBIDDEN_MESSAGE
+          : getApiErrorMessage(error, "축제 수정에 실패했습니다."),
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -138,6 +161,10 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
     삭제는 여전히 남겨 둔다 — 잘못 만든 축제를 정리할 길까지 막을 이유는 없다.
   */
   const isCompleted = festival.progressStatus === "COMPLETED";
+  const updateErrorMessage =
+    getApiErrorCode(updateMutation.error) === VISITOR_MODE_CHANGE_FORBIDDEN_CODE
+      ? VISITOR_MODE_CHANGE_FORBIDDEN_MESSAGE
+      : getApiErrorMessage(updateMutation.error);
 
   function handleEditClick() {
     const updatedName = (name ?? festival?.festivalName ?? "").trim();
@@ -303,14 +330,14 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         title="축제를 수정하시겠습니까?"
-        description={updateMutation.isError ? getApiErrorMessage(updateMutation.error) : undefined}
+        description={updateMutation.isError ? updateErrorMessage : undefined}
         confirmLabel="수정"
         confirmVariant="primary"
         confirmPending={updateMutation.isPending}
         onConfirm={() => updateMutation.mutate()}
       />
       {updateMutation.isError ? (
-        <p className="body-small text-error">{getApiErrorMessage(updateMutation.error)}</p>
+        <p className="body-small text-error">{updateErrorMessage}</p>
       ) : null}
 
       <ConfirmDialog
