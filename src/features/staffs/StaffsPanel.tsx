@@ -31,9 +31,6 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  // 근무구역을 저장하는 백엔드 필드가 아직 없다. 백엔드가 추가되기 전까지는
-  // 이번 세션에서 직접 만든 스태프에 한해 화면에서만 기억해 목록에 보여 준다.
-  const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
   // 임시 비밀번호는 생성 응답에서만 내려오므로 화면에 남겨 두고 직접 전달하게 한다.
   const [created, setCreated] = useState<CreateFieldStaffResult | null>(null);
 
@@ -55,13 +52,17 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
   const isCompleted = festivalQuery.data?.progressStatus === "COMPLETED";
 
   const createMutation = useMutation({
-    mutationFn: () => createFieldStaff(festivalId, { loginId, name, phoneNumber }),
+    mutationFn: () =>
+      createFieldStaff(festivalId, {
+        loginId,
+        name,
+        // 백엔드가 앞뒤 공백을 잘라 저장하므로 빈 값은 아예 보내지 않는다.
+        department: department.trim() || undefined,
+        phoneNumber,
+      }),
     onSuccess: (result) => {
       toast.success(`${result.name} 스태프를 추가했습니다.`);
       setCreated(result);
-      if (department) {
-        setDepartmentByStaffId((prev) => ({ ...prev, [result.staffId]: department }));
-      }
       setName("");
       setDepartment("");
       setPhoneNumber("");
@@ -232,8 +233,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
                       </p>
                     </div>
                     <p className="body-small wrap-anywhere pl-4 text-zinc-500">
-                      {staff.department ?? departmentByStaffId[staff.staffId] ?? "-"} ·{" "}
-                      {staff.loginId}
+                      {staff.department ?? "-"} · {staff.loginId}
                     </p>
                   </Link>
                 </div>

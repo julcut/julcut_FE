@@ -37,6 +37,7 @@ export function FieldStaffDetailPanel({
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState<string | null>(null);
+  const [department, setDepartment] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
@@ -54,12 +55,19 @@ export function FieldStaffDetailPanel({
       if (!staff) return Promise.resolve();
       return updateFieldStaff(festivalId, staffId, {
         name: name ?? staff.name,
+        /*
+          백엔드는 근무구역이 생략되면 기존 값을 유지하고 빈 문자열이면 값을 지운다.
+          입력을 건드리지 않았으면(null) 기존 값을 그대로 실어 보내 의도치 않은
+          삭제를 막고, 사용자가 직접 비웠을 때만 빈 문자열이 나가 값이 지워진다.
+        */
+        department: department ?? staff.department ?? undefined,
         phoneNumber: phoneNumber ?? staff.phoneNumber,
       });
     },
     onSuccess: () => {
       toast.success("스태프 정보를 저장했습니다.");
       setName(null);
+      setDepartment(null);
       setPhoneNumber(null);
       invalidateStaff();
     },
@@ -122,6 +130,10 @@ export function FieldStaffDetailPanel({
           <dd className="body-regular">{staff.loginId}</dd>
         </div>
         <div className="flex gap-2">
+          <dt className="body-small w-24 text-zinc-500">근무구역</dt>
+          <dd className="body-regular">{staff.department ?? "-"}</dd>
+        </div>
+        <div className="flex gap-2">
           <dt className="body-small w-24 text-zinc-500">전화번호</dt>
           <dd className="body-regular">{staff.phoneNumber}</dd>
         </div>
@@ -141,6 +153,13 @@ export function FieldStaffDetailPanel({
           label="이름"
           value={name ?? staff.name}
           onChange={(event) => setName(event.target.value)}
+        />
+        <Input
+          label="근무구역"
+          placeholder="근무구역"
+          maxLength={100}
+          value={department ?? staff.department ?? ""}
+          onChange={(event) => setDepartment(event.target.value)}
         />
         <Input
           label="전화번호"
