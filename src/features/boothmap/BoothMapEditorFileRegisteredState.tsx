@@ -215,6 +215,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [removePamphletOpen, setRemovePamphletOpen] = useState(false);
+  /*
+    분석 안내를 닫아 둔 작업 키. 새 분석이 시작되거나 상태가 바뀌면 다시 띄운다 —
+    한 번 닫았다고 다음 결과까지 숨기면 무엇이 끝났는지 알 수 없다.
+  */
+  const [dismissedAnalysisKey, setDismissedAnalysisKey] = useState<string | null>(null);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   /*
     지도 위에서 끌고 있는 핀의 임시 위치. 끄는 동안에는 booths를 건드리지 않고 이 값만
@@ -526,6 +531,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   });
   // 분석 중에는 백엔드가 저장을 거부한다. 화면에서 막지 않으면 의미 없는 409만 돌아온다.
   const analyzing = analysis.isRunning || editorQuery.data?.roadmapStatus === "ANALYZING";
+  /** 지금 떠 있는 분석 안내를 가리키는 키. 작업이나 상태가 바뀌면 값도 바뀐다. */
+  const analysisNoticeKey = analysis.status
+    ? `${analysis.status.jobId}:${analysis.status.status}:${analysis.isTimedOut}`
+    : null;
   /*
     종료된 축제의 부스 배치는 결과리포트의 근거 자료라 뒤늦게 바뀌면 안 된다.
     축제관리의 진입 버튼만 숨기면 주소를 직접 입력해 편집하고 저장까지 할 수 있어,
@@ -1606,6 +1615,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                       ),
                     );
                     setSelectedShapeId(null);
+                    // 도형 편집은 아직 초안이다. 저장하기를 눌러야 서버로 간다.
+                    toast.success(`${name}을(를) 반영했습니다.`, {
+                      description: "저장하기를 눌러야 서버에 반영됩니다.",
+                    });
                   }}
                   onCancel={() => setSelectedShapeId(null)}
                   onDelete={() => deleteShape(selectedShape.id)}
@@ -1696,14 +1709,19 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </div>
       )}
 
-      <MapAnalysisProgressCard
-        analysis={analysis}
-        /*
-          상단 버튼 줄(다시 분석·팜플렛 올리기·저장하기)이 오른쪽 위를 쓰므로 그 아래로
-          내린다. lg:top-10으로 두면 버튼과 같은 높이라 카드가 버튼을 덮는다.
-        */
-        className="absolute top-28 left-1/2 z-20 -translate-x-1/2 lg:top-28"
-      />
+      {/*
+        분석 안내와 팜플렛 배치 패널은 부스 목록 오른쪽 위 같은 자리를 쓴다. 각자
+        absolute로 두면 둘 다 떠 있을 때 겹치므로 한 세로 열에 쌓는다.
+      */}
+      <div className="pointer-events-none absolute top-28 left-4 z-20 flex w-72 flex-col gap-3 lg:top-10 lg:left-[23rem]">
+        {analysisNoticeKey && dismissedAnalysisKey !== analysisNoticeKey ? (
+          <MapAnalysisProgressCard
+            analysis={analysis}
+            className="pointer-events-auto w-full"
+            onDismiss={() => setDismissedAnalysisKey(analysisNoticeKey)}
+          />
+        ) : null}
+      </div>
 
       <Button
         variant="outline"
