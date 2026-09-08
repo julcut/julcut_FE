@@ -10,6 +10,7 @@ import type {
   MapEditorResponse,
   SaveRoadmapDraftRequest,
   ApproveBoothsResponse,
+  PublishRoadmapResponse,
   SaveRoadmapDraftResponse,
 } from "./types";
 
@@ -86,6 +87,22 @@ export async function saveMapEditor(
   const { data } = await adminApiClient.put<ApiResponse<SaveRoadmapDraftResponse>>(
     `/festivals/${festivalId}/maps/${mapId}/editor`,
     request,
+  );
+  return data.data;
+}
+
+/**
+ * 저장된 부스맵을 방문객 앱에 공개한다.
+ *
+ * 사용자 백엔드는 로드맵이 공개 상태일 때만 부스·구역·부지 경계·팜플렛을 내려준다.
+ * 이 요청을 보내기 전까지 방문객은 «아직 배치도가 공개되지 않았어요»만 본다.
+ */
+export async function publishBoothMap(
+  festivalId: string,
+  mapId: string,
+): Promise<PublishRoadmapResponse> {
+  const { data } = await adminApiClient.post<ApiResponse<PublishRoadmapResponse>>(
+    `/festivals/${festivalId}/maps/${mapId}/publish`,
   );
   return data.data;
 }
