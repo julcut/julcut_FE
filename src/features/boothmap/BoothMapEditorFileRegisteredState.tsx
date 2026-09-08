@@ -7,14 +7,12 @@ import { CustomOverlayMap, Map as KakaoMap, Polygon } from "react-kakao-maps-sdk
 import {
   Cross2Icon,
   Crosshair2Icon,
-  DimensionsIcon,
   FaceIcon,
   FileIcon,
   HamburgerMenuIcon,
   HomeIcon,
   RadiobuttonIcon,
   ResetIcon,
-  RulerHorizontalIcon,
 } from "@radix-ui/react-icons";
 import { toast } from "sonner";
 import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
@@ -146,6 +144,20 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const kakaoMapRef = useRef<kakao.maps.Map | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  /*
+    지도 위에서 끌고 있는 핀의 임시 위치. 끄는 동안에는 booths를 건드리지 않고 이 값만
+    갱신한다 — 매 프레임 booths를 바꾸면 드래그 한 번에 실행취소 기록이 수십 개 쌓인다.
+    실제 좌표는 손을 뗄 때 한 번만 반영해 되돌리기 한 번으로 원위치되게 한다.
+  */
+  const [draggingPin, setDraggingPin] = useState<{ id: string; lat: number; lng: number } | null>(
+    null,
+  );
+  /** 드래그로 끝난 포인터인지. 이 값이 true면 이어서 오는 click을 무시한다. */
+  const pinDraggedRef = useRef(false);
+  /** 핀 위에 커서가 올라와 있는지. 지도 드래그 잠금을 언제 풀지 판단하는 데 쓴다. */
+  const pinHoveredRef = useRef(false);
+  /** 지금 핀을 끌고 있는지. 상태(draggingPin)는 이벤트 핸들러에서 늦게 보여 ref로 따로 둔다. */
+  const pinDraggingRef = useRef(false);
   const festivalQuery = useQuery({
     queryKey: ["managed-festival", festivalId],
     queryFn: () => getManagedFestival(festivalId),
@@ -524,6 +536,70 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setPinTypeMenuOpen(false);
   }
 
+  /** 끌고 있는 핀은 아직 booths에 반영되지 않았으므로 임시 위치를 대신 쓴다. */
+  function pinPositionOf(booth: LocalBoothPin) {
+    return draggingPin?.id === booth.id
+      ? { lat: draggingPin.lat, lng: draggingPin.lng }
+      : { lat: booth.lat, lng: booth.lng };
+  }
+
+  /**
+   * 지도 위 핀을 끌어 위치를 옮긴다.
+   *
+   * 카카오맵 CustomOverlay에는 마커 같은 draggable 옵션이 없어 포인터 이벤트로 직접 처리한다.
+   * 끄는 동안 지도가 같이 따라 움직이지 않도록 지도 드래그를 잠갔다가 손을 뗄 때 되돌린다.
+   */
+  function startPinDrag(booth: LocalBoothPin, event: React.PointerEvent<HTMLElement>) {
+    // 핀 추가 모드에서는 지도 클릭이 곧 새 핀이라 이동을 받지 않는다.
+    if (editingLocked || drawTool === "pin" || event.button !== 0) return;
+    const map = kakaoMapRef.current;
+    const wrapper = mapWrapperRef.current;
+    if (!map || !wrapper || !window.kakao?.maps) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    pinDraggedRef.current = false;
+    pinDraggingRef.current = true;
+    // 커서가 핀에 올라온 시점에 이미 잠갔지만, 터치처럼 hover 없이 바로 누르는 입력도 있다.
+    map.setDraggable(false);
+
+    const coordsAt = (clientX: number, clientY: number) => {
+      const bounds = wrapper.getBoundingClientRect();
+      return map
+        .getProjection()
+        .coordsFromContainerPoint(
+          new window.kakao.maps.Point(clientX - bounds.left, clientY - bounds.top),
+        );
+    };
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      pinDraggedRef.current = true;
+      const coords = coordsAt(moveEvent.clientX, moveEvent.clientY);
+      setDraggingPin({ id: booth.id, lat: coords.getLat(), lng: coords.getLng() });
+    };
+    const handleUp = (upEvent: PointerEvent) => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+      pinDraggingRef.current = false;
+      // 손을 뗀 자리에 아직 핀이 있으면 잠금을 그대로 둔다 — 바로 다시 끌 수 있어야 한다.
+      if (!pinHoveredRef.current) map.setDraggable(true);
+      setDraggingPin(null);
+      // 움직이지 않았다면 그냥 클릭이다. 이어지는 click 핸들러가 핀을 선택한다.
+      if (!pinDraggedRef.current) return;
+      const coords = coordsAt(upEvent.clientX, upEvent.clientY);
+      setBooths((prev) =>
+        prev.map((item) =>
+          item.id === booth.id ? { ...item, lat: coords.getLat(), lng: coords.getLng() } : item,
+        ),
+      );
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+  }
+
   function toggleChecked(id: string) {
     setEditingBoothId(null);
     setCheckedIds((prev) => {
@@ -778,21 +854,49 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               return (
                 <CustomOverlayMap
                   key={booth.id}
-                  position={{ lat: booth.lat, lng: booth.lng }}
+                  position={pinPositionOf(booth)}
                   clickable
                   zIndex={isSelected ? 20 : 10}
                 >
                   <button
                     type="button"
-                    title={booth.name}
+                    title={editingLocked ? booth.name : `${booth.name} (끌어서 위치 이동)`}
                     aria-label={booth.name}
+                    /*
+                      카카오맵은 지도 엘리먼트에서 네이티브 mousedown을 먼저 잡아 패닝을
+                      시작한다. React 핸들러는 그 뒤에 오므로 누른 다음 잠그면 이미 늦어
+                      핀과 지도가 함께 움직인다. 커서가 핀에 올라온 순간 미리 잠근다.
+                    */
+                    onPointerEnter={() => {
+                      pinHoveredRef.current = true;
+                      if (!editingLocked && drawTool !== "pin") {
+                        kakaoMapRef.current?.setDraggable(false);
+                      }
+                    }}
+                    onPointerLeave={() => {
+                      pinHoveredRef.current = false;
+                      if (!pinDraggingRef.current) kakaoMapRef.current?.setDraggable(true);
+                    }}
+                    onPointerDown={(event) => startPinDrag(booth, event)}
                     onClick={(event) => {
                       event.stopPropagation();
+                      // 끌어서 옮긴 직후의 click은 선택이 아니다.
+                      if (pinDraggedRef.current) {
+                        pinDraggedRef.current = false;
+                        return;
+                      }
                       setSelectedZoneId(zoneIdByBoothId.get(booth.id) ?? null);
                       setCheckedIds(new Set([booth.id]));
                       setEditingBoothId(booth.id);
                     }}
-                    className="relative flex size-3 items-center justify-center"
+                    className={cn(
+                      "relative flex size-3 touch-none items-center justify-center",
+                      editingLocked || drawTool === "pin"
+                        ? "cursor-default"
+                        : draggingPin?.id === booth.id
+                          ? "cursor-grabbing"
+                          : "cursor-grab",
+                    )}
                   >
                     {isSelected ? (
                       <span className="absolute size-3 rounded-full bg-point-600/25" />
@@ -808,7 +912,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             })}
             {selectedBooth && !editingLocked ? (
               <CustomOverlayMap
-                position={{ lat: selectedBooth.lat, lng: selectedBooth.lng }}
+                position={pinPositionOf(selectedBooth)}
                 {...POPOVER_ANCHORS}
                 zIndex={30}
               >
@@ -1152,22 +1256,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               ))}
             </div>
           ) : null}
-          <span title="1차는 핀만 지원합니다.">
-            <IconButton
-              icon={<DimensionsIcon className="size-5" />}
-              aria-label="폴리곤 추가"
-              disabled
-              className="text-zinc-950"
-            />
-          </span>
-          <span title="1차는 핀만 지원합니다.">
-            <IconButton
-              icon={<RulerHorizontalIcon className="size-5" />}
-              aria-label="라인 추가"
-              disabled
-              className="text-zinc-950"
-            />
-          </span>
+          {/*
+            폴리곤·라인 버튼은 눌리지 않는 채로 계속 노출돼 "수정이 안 된다"는 오해를
+            반복해서 만들었다. 자유 도형을 서버가 받을 수 있게 되기 전까지는 버튼 자체를
+            숨긴다. 구역 경계는 지금도 묶인 부스 핀에서 자동으로 그려진다.
+          */}
         </div>
         <MapZoomControls
           onZoomIn={() => setZoomStep((step) => Math.max(step - 1, -2))}
