@@ -87,6 +87,18 @@ export function BoothMapView({
   const [kakaoMap, setKakaoMap] = useState<kakao.maps.Map | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  /*
+    목록에서 부스를 고르면 그 부스가 화면 가운데로 오게 옮긴다. 목록은 왼쪽 패널이
+    가리는 자리에 있는 부스도 보여 주므로, 눌러도 지도에서 어디인지 못 찾는 일이
+    있었다. 지도 위 마커를 눌러 고른 경우에도 같은 자리로 모아 준다.
+  */
+  const selectedLat = selectedBooth?.lat;
+  const selectedLng = selectedBooth?.lng;
+  useEffect(() => {
+    if (!kakaoMap || selectedLat === undefined || selectedLng === undefined) return;
+    kakaoMap.panTo(new kakao.maps.LatLng(selectedLat, selectedLng));
+  }, [kakaoMap, selectedLat, selectedLng]);
+
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
