@@ -117,14 +117,15 @@ async function mockStaffApis(page: Page, options: MockOptions = {}) {
   return requests;
 }
 
-test("스태프 상단바는 축지법 워드마크와 로그인한 스태프 이름을 보여준다", async ({ page }) => {
+test("스태프 상단바는 축지법 워드마크만 보여주고 이름은 넣지 않는다", async ({ page }) => {
   await mockStaffApis(page);
   await page.goto("/staff/dashboard");
 
   const header = page.getByRole("banner");
   await expect(header.getByText("축지법")).toBeVisible();
   await expect(header.getByText("로고")).toHaveCount(0);
-  await expect(header.getByText(`${staffName} 님`)).toBeVisible();
+  // 상단바는 로고·역할 배지·검색·로그아웃까지만 둔다.
+  await expect(header.getByText(`${staffName} 님`)).toHaveCount(0);
 });
 
 test("로그아웃해도 담당 축제 ID가 남아 다시 로그인할 수 있다", async ({ page }) => {

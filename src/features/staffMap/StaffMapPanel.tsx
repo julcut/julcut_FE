@@ -114,7 +114,8 @@ export function StaffMapPanel() {
 
   // 화면설계서 MAIN01/EDIT01은 지도를 화면 전체로 깔고 그 위에 하단바·줄끝갱신 모달을 얹는다.
   return (
-    <div className="relative min-h-0 flex-1">
+    // 공통 여백(20)을 되돌려 지도를 화면 끝까지 채운다.
+    <div className="relative -m-5 min-h-0 flex-1">
       <BoothMapView
         booths={festival.booths}
         facilities={festival.facilities}

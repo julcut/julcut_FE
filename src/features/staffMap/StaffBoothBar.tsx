@@ -7,7 +7,7 @@ import { CongestionText } from "@/components/ui/CongestionBadge";
 import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import type { Booth } from "@/features/dashboard/types";
 
-const METRIC_LABEL_CLASSES = "body-caption [&_svg]:size-3.5";
+const METRIC_LABEL_CLASSES = "body-small text-zinc-500 [&_svg]:size-3";
 
 export interface StaffBoothBarProps {
   booth: Booth;
@@ -28,7 +28,7 @@ export function StaffBoothBar({
   onUpdateQueue,
 }: StaffBoothBarProps) {
   return (
-    <div className="absolute inset-x-5 bottom-5 z-10 rounded-2xl bg-white p-4 shadow-lg">
+    <div className="absolute inset-x-5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-10 rounded-2xl bg-white px-4 py-3 shadow-lg">
       <div className="flex items-start justify-between gap-3">
         <MapMetric
           value={
@@ -63,21 +63,29 @@ export function StaffBoothBar({
               <span className="body-small text-zinc-400">미입력</span>
             )
           }
-          valueClassName="body-small-bold"
+          valueClassName="body-regular-bold"
           labelClassName={METRIC_LABEL_CLASSES}
           label="혼잡도"
           description="이 부스의 최신 혼잡도입니다."
         />
         <MapMetric
           value={queueTailZoneName ?? <span className="body-small text-zinc-400">미입력</span>}
-          valueClassName="body-small-bold"
+          valueClassName="body-regular"
           labelClassName={METRIC_LABEL_CLASSES}
           label="줄끝"
           description="대기 줄의 끝이 마지막으로 기록된 구역입니다."
         />
         <MapMetric
-          value={formatWaitMinutes(booth.waitMinutes ?? null)}
-          valueClassName="body-small-bold"
+          value={
+            booth.waitMinutes == null ? (
+              formatWaitMinutes(null)
+            ) : (
+              <>
+                <span className="body-regular-bold">{booth.waitMinutes}</span> 분
+              </>
+            )
+          }
+          valueClassName="body-regular"
           labelClassName={METRIC_LABEL_CLASSES}
           label="예상 대기시간"
           description="이 부스의 최신 예상 대기시간입니다."

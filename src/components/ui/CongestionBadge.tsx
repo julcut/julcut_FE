@@ -20,7 +20,7 @@ export const CONGESTION_SOLID_CLASSES: Record<CongestionLevel, string> = {
 
 const CONGESTION_TEXT_CLASSES: Record<CongestionLevel, string> = {
   LOW: "text-secondary-600",
-  MEDIUM: "text-point-500",
+  MEDIUM: "text-point-600",
   HIGH: "text-red-600",
 };
 

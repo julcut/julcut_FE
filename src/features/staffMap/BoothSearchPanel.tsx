@@ -28,7 +28,7 @@ export function BoothSearchPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <h1 className="heading-small text-zinc-950">부스 찾기</h1>
 
       <div className="relative">

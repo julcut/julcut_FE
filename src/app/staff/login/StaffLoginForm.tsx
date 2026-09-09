@@ -63,7 +63,8 @@ export function StaffLoginForm({ festivalId, sessionExpired = false }: StaffLogi
     inviteError || (loginMutation.isError ? getApiErrorMessage(loginMutation.error) : undefined);
 
   return (
-    <main className="bg-dimmed flex flex-1 flex-col justify-center px-5 py-8">
+    /* 로그인은 배경을 화면 끝까지 채운다 — 공통 여백(20)을 되돌린다. */
+    <main className="bg-dimmed -m-5 flex flex-1 flex-col justify-center px-5 py-8">
       {/* 화면설계서 AUTH01: 헤더 타이틀이 붙은 카드 안에 아이디·비밀번호 폼과 CTA를 담는다. */}
       <div className="w-full rounded-2xl bg-white">
         <div className="px-5 pt-4">

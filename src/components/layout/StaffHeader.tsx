@@ -25,44 +25,45 @@ export function StaffHeader() {
   const logoutMutation = useMutation({ mutationFn: logoutStaff });
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-white px-5">
-      <Link
-        // 로그인 화면으로 돌아갈 때도 축제 ID를 잃으면 다시 로그인할 수 없다.
-        href={isLoggedIn ? "/staff/dashboard" : staffLoginPath({ festivalId })}
-        className="flex min-w-0 items-center gap-2"
-      >
-        {/* 콘솔 헤더와 같은 워드마크. `primary` 변경에 영향받지 않도록 색을 직접 지정한다. */}
-        <span className="flex h-8 w-12 shrink-0 items-center justify-center bg-zinc-200">
-          <span className="body-small-bold text-zinc-900">축지법</span>
-        </span>
-        <StaffBadge className="shrink-0" />
-        {/* 현장에서 여러 계정을 돌려 쓰기 때문에 지금 로그인한 사람이 누구인지 보여준다. */}
-        {session ? (
-          <span title={session.name} className="body-small min-w-0 truncate text-zinc-950">
-            {session.name} 님
+    /*
+      노치·다이나믹 아일랜드 아래로 내려 준다. safe-area 값이 0인 기기(데스크톱 등)에서는
+      지금까지와 같은 높이 그대로다.
+    */
+    <header className="shrink-0 border-b border-zinc-200 bg-white pt-[env(safe-area-inset-top)]">
+      <div className="flex h-12 items-center justify-between gap-2 px-5">
+        <Link
+          // 로그인 화면으로 돌아갈 때도 축제 ID를 잃으면 다시 로그인할 수 없다.
+          href={isLoggedIn ? "/staff/dashboard" : staffLoginPath({ festivalId })}
+          className="flex min-w-0 items-center gap-2"
+        >
+          {/* 콘솔 헤더와 같은 워드마크. `primary` 변경에 영향받지 않도록 색을 직접 지정한다. */}
+          <span className="flex h-8 w-12 shrink-0 items-center justify-center bg-zinc-200">
+            <span className="body-small-bold text-zinc-900">축지법</span>
           </span>
-        ) : null}
-      </Link>
+          <StaffBadge className="shrink-0" />
+        </Link>
 
-      {isLoggedIn ? (
-        <div className="flex shrink-0 items-center gap-3">
-          <IconButton
-            variant="ghost"
-            aria-label="부스 검색"
-            icon={<MagnifyingGlassIcon />}
-            iconClassName="size-6 text-zinc-950"
-            onClick={() => router.push("/staff/booths")}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="px-2 py-1"
-            onClick={() => setLogoutOpen(true)}
-          >
-            로그아웃
-          </Button>
-        </div>
-      ) : null}
+        {isLoggedIn ? (
+          <div className="flex shrink-0 items-center gap-3">
+            <IconButton
+              variant="ghost"
+              aria-label="부스 검색"
+              icon={<MagnifyingGlassIcon />}
+              // Radix 아이콘은 15px로 고정돼 있어 감싸는 상자만 키워서는 커지지 않는다.
+              iconClassName="size-6 text-zinc-950 [&_svg]:size-6"
+              onClick={() => router.push("/staff/booths")}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2 py-1"
+              onClick={() => setLogoutOpen(true)}
+            >
+              로그아웃
+            </Button>
+          </div>
+        ) : null}
+      </div>
 
       <ConfirmDialog
         open={logoutOpen}
