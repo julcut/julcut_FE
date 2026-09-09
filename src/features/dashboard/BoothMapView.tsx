@@ -11,7 +11,7 @@ import { QueuePathLayer, type QueuePathItem } from "@/features/boothmap/QueuePat
 import { nodeTypeIcon, nodeTypeLabel } from "@/features/boothmap/nodeTypeIcons";
 import type { LocalPamphletOverlay } from "@/features/boothmap/mapPresentation";
 import type { LatLng } from "@/features/boothmap/latLng";
-import type { Booth, FacilityMarker } from "./types";
+import type { Booth, CongestionLevel, FacilityMarker } from "./types";
 
 /**
  * 부스가 아닌 핀에 씌우는 동그란 아이콘 배지.
@@ -53,6 +53,31 @@ function BoothPopup({ booth, onClose }: { booth: Booth; onClose: () => void }) {
       <div className="-mt-2.5 size-5 rotate-45 bg-white" />
     </div>
   );
+}
+
+/*
+  혼잡도를 점 색으로 보여 준다. 대기시간 표를 부스마다 달면 지도가 글씨로 덮이므로,
+  급한 곳을 색으로 먼저 알아보고 자세한 시간은 눌러서 확인하게 한다.
+*/
+const CONGESTION_DOT_CLASSES: Record<CongestionLevel, string> = {
+  LOW: "bg-secondary-600",
+  MEDIUM: "bg-point-500",
+  HIGH: "bg-red-600",
+};
+
+const CONGESTION_RING_CLASSES: Record<CongestionLevel, string> = {
+  LOW: "bg-secondary-600/25",
+  MEDIUM: "bg-point-500/25",
+  HIGH: "bg-red-600/25",
+};
+
+/** 혼잡도를 아직 모르는 부스는 지금까지와 같은 포인트 색으로 둔다. */
+function congestionDotClass(level: CongestionLevel | undefined) {
+  return level ? CONGESTION_DOT_CLASSES[level] : "bg-point-600";
+}
+
+function congestionRingClass(level: CongestionLevel | undefined) {
+  return level ? CONGESTION_RING_CLASSES[level] : "bg-point-600/25";
 }
 
 export function BoothMapView({
@@ -231,11 +256,17 @@ export function BoothMapView({
                     {nodeTypeIcon(pinType)}
                   </span>
                 ) : isSelected ? (
-                  <span className="flex size-3 items-center justify-center rounded-full bg-point-600/25">
-                    <span className="size-1 rounded-full bg-point-600" />
+                  <span
+                    className={`flex size-3 items-center justify-center rounded-full ${congestionRingClass(booth.congestionLevel)}`}
+                  >
+                    <span
+                      className={`size-1 rounded-full ${congestionDotClass(booth.congestionLevel)}`}
+                    />
                   </span>
                 ) : (
-                  <span className="size-3 rounded-full bg-point-600 shadow-sm" />
+                  <span
+                    className={`size-3 rounded-full shadow-sm ${congestionDotClass(booth.congestionLevel)}`}
+                  />
                 )}
               </button>
             </CustomOverlayMap>
