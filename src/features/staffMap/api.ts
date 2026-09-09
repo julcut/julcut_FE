@@ -1,7 +1,12 @@
 import type { FestivalDashboard, FestivalOperationsMap } from "@/features/dashboard/types";
 import { staffApiClient } from "@/lib/api/staffApiClient";
 import type { ApiResponse } from "@/lib/api/types";
-import type { FestivalQueue, FestivalQueueList, UpdateQueueTailRequest } from "./types";
+import type {
+  FestivalQueue,
+  FestivalQueueList,
+  UpdateBoothCongestionRequest,
+  UpdateQueueTailRequest,
+} from "./types";
 
 /** 담당 축제의 부스·구역·혼잡도를 한 번에 가져온다(스태프 토큰으로도 조회 가능). */
 export async function getStaffFestivalDashboard(festivalId: string): Promise<FestivalDashboard> {
@@ -28,6 +33,23 @@ export async function updateQueueTail(
     request,
   );
   return data.data;
+}
+
+/**
+ * 부스 혼잡도를 스태프가 직접 지정한다.
+ *
+ * 줄끝 갱신이 자동 환산한 값을 덮어쓰므로, 두 가지를 함께 저장할 때는 줄끝을 먼저
+ * 보내고 이 요청을 나중에 보내야 스태프가 고른 값이 남는다.
+ */
+export async function updateBoothCongestion(
+  festivalId: string,
+  boothId: string,
+  request: UpdateBoothCongestionRequest,
+): Promise<void> {
+  await staffApiClient.put<ApiResponse<unknown>>(
+    `/festivals/${festivalId}/booths/${boothId}/congestion`,
+    request,
+  );
 }
 
 /**
