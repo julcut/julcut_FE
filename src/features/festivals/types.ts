@@ -135,21 +135,29 @@ export interface FestivalVisitorCountInputModeResponse {
   visitorCountInputMode: FestivalVisitorCountInputMode;
 }
 
-/** "축제 등록" 화면에서 축제명으로 기존 축제 시리즈를 검색한 결과 한 건. */
+/**
+ * "축제 등록" 화면에서 축제명으로 기존 축제를 검색한 결과 한 건.
+ *
+ * 검색 대상은 관리자가 등록해 시리즈로 묶인 축제와, 공공데이터 파이프라인이 적재해
+ * 아직 시리즈가 없는 축제 둘 다다. 후자는 `seriesId`가 없고 설명·주소·기간 같은
+ * 값도 원본 데이터에 없으면 비어 있다.
+ */
 export interface FestivalSeriesSearchResult {
-  seriesId: string;
+  /** 시리즈에 묶이지 않은 축제(파이프라인 적재분)면 null. */
+  seriesId: string | null;
   name: string;
-  latestFestivalId: string;
-  latestYear: number;
-  latestDescription: string;
-  latestAddress: string;
-  latestDetailAddress: string;
+  /** 개최 이력이 없는 시리즈면 null. */
+  latestFestivalId: string | null;
+  latestYear: number | null;
+  latestDescription: string | null;
+  latestAddress: string | null;
+  latestDetailAddress: string | null;
   /** yyyy-MM-dd */
-  latestStartDate: string;
+  latestStartDate: string | null;
   /** yyyy-MM-dd */
-  latestEndDate: string;
+  latestEndDate: string | null;
   /** HH:mm:ss */
-  latestOperationStartTime: string;
+  latestOperationStartTime: string | null;
   /** HH:mm:ss */
-  latestOperationEndTime: string;
+  latestOperationEndTime: string | null;
 }
