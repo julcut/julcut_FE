@@ -12,6 +12,8 @@ export interface TemporaryPasswordCardProps {
   temporaryPassword: string;
   /** 비밀번호 아래 경고 문구. */
   warning: string;
+  /** 경고 문구 아래 덧붙일 안내(예: 로그인 가능 기간). 필요한 화면에서만 전달한다. */
+  note?: string;
 }
 
 /**
@@ -22,6 +24,7 @@ export function TemporaryPasswordCard({
   title,
   temporaryPassword,
   warning,
+  note,
 }: TemporaryPasswordCardProps) {
   const [copied, setCopied] = useState(false);
 
@@ -55,6 +58,7 @@ export function TemporaryPasswordCard({
         </Button>
       </div>
       <p className="body-caption text-zinc-500">{warning}</p>
+      {note ? <p className="body-caption text-zinc-950">{note}</p> : null}
     </div>
   );
 }

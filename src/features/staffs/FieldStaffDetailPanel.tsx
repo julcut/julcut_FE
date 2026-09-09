@@ -15,18 +15,13 @@ import {
   updateFieldStaffStatus,
 } from "./api";
 import type { FieldStaffStatus } from "./types";
+import { formatStaffDate } from "./validPeriod";
 
 const STATUS_LABEL: Record<FieldStaffStatus, string> = {
   ACTIVE: "활성",
   INACTIVE: "비활성",
   DELETED: "삭제됨",
 };
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("ko-KR");
-}
 
 export function FieldStaffDetailPanel({
   festivalId,
@@ -140,7 +135,7 @@ export function FieldStaffDetailPanel({
         <div className="flex gap-2">
           <dt className="body-small w-24 text-zinc-500">유효 기간</dt>
           <dd className="body-regular">
-            {formatDate(staff.validFrom)} ~ {formatDate(staff.validUntil)}
+            {formatStaffDate(staff.validFrom)} ~ {formatStaffDate(staff.validUntil)}
           </dd>
         </div>
         <div className="flex gap-2">
