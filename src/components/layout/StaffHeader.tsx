@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { StaffBadge } from "@/components/ui/RoleBadge";
 import { logoutStaff } from "@/features/auth/staff/api";
+import { staffLoginPath } from "@/features/auth/staff/loginPath";
 import { useStaffAuthStore } from "@/store/staffAuthStore";
 
 /** 스태프 전용 화면 상단바. 로그인한 뒤에만 부스 검색·로그아웃 액션이 보인다. */
@@ -17,25 +18,34 @@ export function StaffHeader() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useStaffAuthStore((state) => state.session);
+  const festivalId = useStaffAuthStore((state) => state.festivalId);
   const clearSession = useStaffAuthStore((state) => state.clearSession);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const isLoggedIn = session !== null;
   const logoutMutation = useMutation({ mutationFn: logoutStaff });
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-5">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-white px-5">
       <Link
-        href={isLoggedIn ? "/staff/dashboard" : "/staff/login"}
-        className="flex items-center gap-2"
+        // 로그인 화면으로 돌아갈 때도 축제 ID를 잃으면 다시 로그인할 수 없다.
+        href={isLoggedIn ? "/staff/dashboard" : staffLoginPath({ festivalId })}
+        className="flex min-w-0 items-center gap-2"
       >
-        <span className="flex h-8 w-12 items-center justify-center rounded bg-zinc-200">
-          <span className="body-caption text-zinc-500">로고</span>
+        {/* 콘솔 헤더와 같은 워드마크. `primary` 변경에 영향받지 않도록 색을 직접 지정한다. */}
+        <span className="flex h-8 w-12 shrink-0 items-center justify-center bg-zinc-200">
+          <span className="body-small-bold text-zinc-900">축지법</span>
         </span>
-        <StaffBadge />
+        <StaffBadge className="shrink-0" />
+        {/* 현장에서 여러 계정을 돌려 쓰기 때문에 지금 로그인한 사람이 누구인지 보여준다. */}
+        {session ? (
+          <span title={session.name} className="body-small min-w-0 truncate text-zinc-950">
+            {session.name} 님
+          </span>
+        ) : null}
       </Link>
 
       {isLoggedIn ? (
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <IconButton
             variant="ghost"
             aria-label="부스 검색"
@@ -62,11 +72,13 @@ export function StaffHeader() {
         overlayClassName="top-0"
         className="p-6"
         onConfirm={async () => {
+          // 세션을 지우기 전에 담당 축제 ID를 읽어 둬야 로그인 화면에 다시 실어 줄 수 있다.
+          const loginPath = staffLoginPath({ festivalId: session?.festivalId ?? festivalId });
           await logoutMutation.mutateAsync();
           setLogoutOpen(false);
           clearSession();
           queryClient.removeQueries({ queryKey: ["staff-session"] });
-          router.replace("/staff/login");
+          router.replace(loginPath);
         }}
       />
     </header>
