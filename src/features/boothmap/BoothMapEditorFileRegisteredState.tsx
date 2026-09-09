@@ -42,7 +42,6 @@ import {
 } from "./api";
 import { isPanModifier, isTypingTarget } from "./editorGestures";
 import {
-  boothIdsToNodeIds,
   boothMapPinsToNodeChanges,
   partitionEditorNodes,
   SHAPE_MINIMUM_POINTS,
@@ -67,6 +66,7 @@ import {
 import { boothsToQueuePathItems, QueuePathLayer } from "./QueuePathLayer";
 import { MapAnalysisProgressCard } from "./MapAnalysisProgressCard";
 import { NODE_TYPE_LABEL, nodeTypeIcon, PIN_TYPE_OPTIONS } from "./nodeTypeIcons";
+import { buildZoneChanges } from "./zonePayload";
 import { MapInfoPopover } from "./MapInfoPopover";
 import { fitBoothBounds } from "./fitBoothBounds";
 import { primaryFestivalCenter } from "./mapCenter";
@@ -570,14 +570,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               : {}),
         },
         nodes,
-        zones: zones
-          .map((zone, sortOrder) => ({
-            zoneId: zone.id,
-            name: zone.name,
-            sortOrder,
-            boothNodeIds: boothIdsToNodeIds(zone.boothIds, booths),
-          }))
-          .filter((zone) => zone.boothNodeIds.length > 0),
+        zones: buildZoneChanges({ zones, booths, polygonShapes, shapeIdByBoothId }),
       });
     },
     onSuccess: async (response) => {
