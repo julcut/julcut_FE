@@ -967,6 +967,8 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
     setDraftPoints([]);
     setDrawTool("select");
     setEditingBoothId(null);
+    // 앞서 고른 구역을 그대로 두면 새 도형과 말풍선이 겹쳐 뜬다.
+    setSelectedZoneId(null);
     setSelectedShapeId(id);
   }
 
@@ -2126,7 +2128,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                 />
               </CustomOverlayMap>
             ) : null}
-            {selectedShape && !editingLocked ? (
+            {selectedShape && !editingLocked && drawTool === "select" ? (
               <CustomOverlayMap
                 position={shapeAnchor({ ...selectedShape, points: shapePointsOf(selectedShape) })}
                 {...POPOVER_ANCHORS}
@@ -2203,6 +2205,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
               : null}
             {selectedZone &&
             !selectedBooth &&
+            !selectedShape &&
             !editingLocked &&
             checkedIds.size === 0 &&
             selectedZoneMembers.length > 0 ? (
