@@ -32,6 +32,19 @@ const TYPE_CATEGORY_OPTIONS: { value: MapObjectTypeCategory; label: string; icon
 ];
 
 /**
+ * 말풍선을 열어 둔 채로 봐야 하는 대상인지.
+ *
+ * 지도 위 도구 버튼(대기줄·핀·도형)은 «바깥»으로 치지 않는다. 예전에는 부스를 고른 뒤
+ * 대기줄 버튼을 누르면, 버튼이 눌리기 전에 바깥 클릭 처리가 말풍선을 닫으며 부스 선택
+ * 까지 풀어 버려 버튼이 그 순간 비활성이 됐다. 그래서 몇 번을 눌러도 도구가 열리지
+ * 않았다.
+ */
+export function keepsPopoverOpen(target: EventTarget | null): boolean {
+  const element = target as { closest?: (selector: string) => unknown } | null;
+  return Boolean(element?.closest?.("[data-map-tools]"));
+}
+
+/**
  * 지도 위 핀/구역을 클릭했을 때 뜨는 말풍선 팝오버 — 그룹(구역) 생성, 구역 이름
  * 수정, 개별 부스 이름 수정 3가지 모드를 하나의 컴포넌트로 처리한다.
  * "상위구역"(중첩 구역)은 아직 지원하지 않아 항상 "-"로 고정 표시한다.
@@ -87,6 +100,7 @@ export function MapInfoPopover({
     function handlePointerDown(event: PointerEvent) {
       if (pendingDelete) return;
       if (popoverRef.current?.contains(event.target as Node)) return;
+      if (keepsPopoverOpen(event.target)) return;
       setTypeMenuOpen(false);
       setTypeCategory(null);
       onCancel();

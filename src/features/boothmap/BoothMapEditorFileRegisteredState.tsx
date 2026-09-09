@@ -247,6 +247,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   const queryClient = useQueryClient();
   const setHideNav = useConsoleUiStore((state) => state.setHideNav);
   const setFullBleed = useConsoleUiStore((state) => state.setFullBleed);
+  const setToastBelowActionBar = useConsoleUiStore((state) => state.setToastBelowActionBar);
   const [zoomStep, setZoomStep] = useState(0);
   const [boothListOpen, setBoothListOpen] = useState(false);
   const [drawTool, setDrawTool] = useState<DrawTool>("select");
@@ -1459,11 +1460,14 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
   useEffect(() => {
     setHideNav(true);
     setFullBleed(true);
+    // 오른쪽 위 액션 바를 알림이 덮어 «저장하기» 클릭까지 막던 것을 피한다.
+    setToastBelowActionBar(true);
     return () => {
       setHideNav(false);
       setFullBleed(false);
+      setToastBelowActionBar(false);
     };
-  }, [setHideNav, setFullBleed]);
+  }, [setHideNav, setFullBleed, setToastBelowActionBar]);
 
   useEffect(() => {
     const wrapper = mapWrapperRef.current;
@@ -1737,6 +1741,12 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
             isPanto={false}
             level={2 + zoomStep}
             scrollwheel={false}
+            /*
+              도형 그리기를 더블클릭으로 끝내는데, 카카오 기본 더블클릭 확대가 같이
+              걸려 그릴 때마다 지도가 한 단계씩 확대됐다. 확대는 오른쪽 아래 버튼으로
+              한다. 이 값은 지도 생성 때만 반영되므로 상수로 둔다.
+            */
+            disableDoubleClickZoom
             className="h-full w-full"
             onCreate={(map) => {
               kakaoMapRef.current = map;
@@ -2062,7 +2072,11 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
                 </CustomOverlayMap>
               );
             })}
-            {selectedBooth && !editingLocked ? (
+            {/*
+              그리기 도구를 켜면 말풍선은 접는다. 대기줄처럼 부스를 고른 뒤 쓰는 도구는
+              선택을 그대로 둬야 하는데, 말풍선까지 떠 있으면 그릴 자리를 가린다.
+            */}
+            {selectedBooth && !editingLocked && drawTool === "select" ? (
               <CustomOverlayMap
                 position={pinPositionOf(selectedBooth)}
                 {...POPOVER_ANCHORS}
@@ -2406,7 +2420,10 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
         </MapSidePanel>
       </div>
 
-      <div className="absolute top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 lg:top-10 lg:right-8 lg:left-auto lg:gap-4">
+      <div
+        data-map-tools
+        className="absolute top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 lg:top-10 lg:right-8 lg:left-auto lg:gap-4"
+      >
         <div className="flex items-center gap-2">
           <span
             title={
@@ -2527,6 +2544,7 @@ export function BoothMapEditorFileRegisteredState({ festivalId }: { festivalId: 
 
       <div
         ref={mapToolsRef}
+        data-map-tools
         className="absolute right-4 bottom-4 flex flex-col items-center gap-5 lg:right-8 lg:bottom-10"
       >
         <div className="flex flex-col gap-1">
