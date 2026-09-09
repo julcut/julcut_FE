@@ -1,4 +1,4 @@
-import type { ModifierType } from "@/features/dashboard/types";
+import type { CongestionLevel, ModifierType } from "@/features/dashboard/types";
 
 export interface QueuePathPoint {
   lat: number;
@@ -31,4 +31,16 @@ export interface UpdateQueueTailRequest {
   tailLongitude: number;
   queueTailMeters?: number;
   path?: QueuePathPoint[];
+}
+
+/**
+ * 스태프가 직접 정한 혼잡도.
+ *
+ * 줄끝 갱신만 하면 서버가 줄 길이로 등급과 대기시간을 자동 환산하는데, 현장에서는
+ * 줄 길이만으로 설명되지 않는 상황(조리 지연, 일시 중단 등)이 있어 직접 덮어쓸 수 있다.
+ */
+export interface UpdateBoothCongestionRequest {
+  /** 예상 대기시간(분). 0 이상이어야 한다. */
+  waitMinutes: number;
+  congestionLevel: CongestionLevel;
 }

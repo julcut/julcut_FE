@@ -1,4 +1,5 @@
 import type { Booth, CongestionLevel } from "@/features/dashboard/types";
+import { parseServerDateTime } from "@/lib/serverDateTime";
 
 const EARTH_RADIUS_METERS = 6_371_000;
 
@@ -56,12 +57,18 @@ export function busiestBooth(booths: Booth[]): Booth | null {
   });
 }
 
-/** "방금 전" / "5분 전" / "2시간 전" 형태의 상대 시각. */
+/**
+ * "방금 전" / "5분 전" / "2시간 전" 형태의 상대 시각.
+ *
+ * 서버가 타임존 표기 없이 UTC로 내려주므로 `parseServerDateTime`으로 읽는다.
+ * 그냥 `new Date`로 읽으면 방금 갱신한 값이 "9시간 전"으로 보인다.
+ */
 export function formatRelativeTime(isoDateTime: string | null | undefined): string {
   if (!isoDateTime) return "기록 없음";
-  const target = new Date(isoDateTime).getTime();
+  const target = parseServerDateTime(isoDateTime);
   if (Number.isNaN(target)) return "기록 없음";
   const diffMinutes = Math.floor((Date.now() - target) / 60_000);
+  // 서버 시계가 조금 앞서 있어도 "-1분 전"처럼 보이지 않게 한다.
   if (diffMinutes < 1) return "방금 전";
   if (diffMinutes < 60) return `${diffMinutes}분 전`;
   const diffHours = Math.floor(diffMinutes / 60);

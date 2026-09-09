@@ -1,4 +1,5 @@
 import axios from "axios";
+import { staffLoginPath } from "@/features/auth/staff/loginPath";
 import { useStaffAuthStore } from "@/store/staffAuthStore";
 
 export const staffApiClient = axios.create({
@@ -19,9 +20,10 @@ staffApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // 스태프 로그인에는 축제 ID가 필요하므로 세션을 지우기 전에 먼저 읽어 둔다.
       const expiredSession = useStaffAuthStore.getState().session;
       useStaffAuthStore.getState().clearSession();
+      // 스태프 로그인에는 축제 ID가 필요한데, 스토어의 축제 ID는 세션을 지워도 남는다.
+      const festivalId = useStaffAuthStore.getState().festivalId;
       // 처음부터 로그인한 적 없는 경우(StaffAuthGuard의 최초 세션 조회 실패)는
       // 만료가 아니므로 가드가 하는 기존 이동에 맡긴다.
       if (
@@ -29,8 +31,7 @@ staffApiClient.interceptors.response.use(
         typeof window !== "undefined" &&
         isStaffScreen(window.location.pathname)
       ) {
-        const params = new URLSearchParams({ expired: "1", festivalId: expiredSession.festivalId });
-        window.location.replace(`/staff/login?${params.toString()}`);
+        window.location.replace(staffLoginPath({ festivalId, expired: true }));
       }
     }
     return Promise.reject(error);

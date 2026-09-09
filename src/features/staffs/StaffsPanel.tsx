@@ -15,6 +15,7 @@ import { getManagedFestival } from "@/features/festivals/api";
 import { getApiErrorMessage } from "@/lib/api/httpError";
 import { createFieldStaff, deleteFieldStaffBulk, getFieldStaffList } from "./api";
 import type { CreateFieldStaffResult } from "./types";
+import { staffLoginPeriodNotice } from "./validPeriod";
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -123,6 +124,7 @@ export function StaffsPanel({ festivalId }: { festivalId: string }) {
               title={`${created.name}(${created.loginId}) 스태프 계정이 생성되었습니다.`}
               temporaryPassword={created.temporaryPassword}
               warning="임시 비밀번호는 지금만 확인할 수 있습니다. 스태프에게 아이디와 함께 바로 전달해주세요."
+              note={staffLoginPeriodNotice(created.validFrom, created.validUntil)}
             />
           ) : null}
 

@@ -71,19 +71,9 @@ const CONGESTION_DOT_CLASSES: Record<CongestionLevel, string> = {
   HIGH: "bg-red-600",
 };
 
-const CONGESTION_RING_CLASSES: Record<CongestionLevel, string> = {
-  LOW: "bg-secondary-600/25",
-  MEDIUM: "bg-point-500/25",
-  HIGH: "bg-red-600/25",
-};
-
 /** 혼잡도를 아직 모르는 부스는 지금까지와 같은 포인트 색으로 둔다. */
 function congestionDotClass(level: CongestionLevel | undefined) {
   return level ? CONGESTION_DOT_CLASSES[level] : "bg-point-600";
-}
-
-function congestionRingClass(level: CongestionLevel | undefined) {
-  return level ? CONGESTION_RING_CLASSES[level] : "bg-point-600/25";
 }
 
 export function BoothMapView({
@@ -97,6 +87,7 @@ export function BoothMapView({
   queues = [],
   pamphlet = null,
   boundary = null,
+  minLevel = 2,
   onZoomByWheel,
 }: {
   booths: Booth[];
@@ -112,6 +103,11 @@ export function BoothMapView({
   queues?: QueuePathItem[];
   pamphlet?: LocalPamphletOverlay | null;
   boundary?: LatLng[] | null;
+  /**
+   * 확대 한계(카카오 레벨은 작을수록 확대). 기본값 2는 콘솔 대시보드 기준이고,
+   * 화면이 좁아 부스가 더 크게 보여야 하는 스태프 지도만 1까지 열어 준다.
+   */
+  minLevel?: number;
   onZoomByWheel?: (direction: 1 | -1) => void;
 }) {
   const [loading, error] = useKakaoMapLoader();
@@ -189,7 +185,7 @@ export function BoothMapView({
         // onCreate에서 직접 정확한 인자로 호출한다.
         onCreate={(map) => {
           setKakaoMap(map);
-          map.setMinLevel(2);
+          map.setMinLevel(minLevel);
           map.setMaxLevel(8);
         }}
       >
@@ -253,7 +249,7 @@ export function BoothMapView({
                   event.stopPropagation();
                   onSelectBooth(isSelected ? null : booth);
                 }}
-                className={`flex items-center justify-center ${isIconPin ? "size-5" : "size-3"}`}
+                className={`flex items-center justify-center ${isIconPin || isSelected ? "size-5" : "size-3"}`}
               >
                 {isIconPin ? (
                   <span
@@ -262,13 +258,13 @@ export function BoothMapView({
                     {nodeTypeIcon(pinType)}
                   </span>
                 ) : isSelected ? (
+                  /*
+                    고른 부스는 더 크고 진하게 그린다. 예전에는 투명도 25% 링 안에 4px 점을
+                    찍어서, 고르고 나면 오히려 흐려져 어느 부스를 골랐는지 알아보기 어려웠다.
+                  */
                   <span
-                    className={`flex size-3 items-center justify-center rounded-full ${congestionRingClass(booth.congestionLevel)}`}
-                  >
-                    <span
-                      className={`size-1 rounded-full ${congestionDotClass(booth.congestionLevel)}`}
-                    />
-                  </span>
+                    className={`size-5 rounded-full border-2 border-white shadow-md ring-2 ring-zinc-950/30 ${congestionDotClass(booth.congestionLevel)}`}
+                  />
                 ) : (
                   <span
                     className={`size-3 rounded-full shadow-sm ${congestionDotClass(booth.congestionLevel)}`}

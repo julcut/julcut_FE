@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { loginStaff } from "@/features/auth/staff/api";
@@ -19,9 +19,19 @@ export interface StaffLoginFormProps {
 export function StaffLoginForm({ festivalId, sessionExpired = false }: StaffLoginFormProps) {
   const router = useRouter();
   const setSession = useStaffAuthStore((state) => state.setSession);
+  const rememberFestivalId = useStaffAuthStore((state) => state.rememberFestivalId);
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [inviteError, setInviteError] = useState("");
+
+  /*
+    초대 링크로 들어온 축제 ID를 스토어에 남겨 둔다. 로그인 전 화면에서 상단바 로고를
+    눌러 되돌아오거나 로그인에 실패해도 축제 ID를 잃지 않게 하기 위한 것이다.
+  */
+  useEffect(() => {
+    const trimmed = festivalId?.trim();
+    if (trimmed) rememberFestivalId(trimmed);
+  }, [festivalId, rememberFestivalId]);
 
   const loginMutation = useMutation({
     mutationFn: loginStaff,
@@ -36,6 +46,19 @@ export function StaffLoginForm({ festivalId, sessionExpired = false }: StaffLogi
     },
   });
 
+  /*
+    로그인 실패 안내는 그때 입력한 값에 대한 결과다. 아이디나 비밀번호를 다시 고치면
+    더 이상 맞지 않는 문구이므로 지운다.
+  */
+  const clearErrors = () => {
+    setInviteError("");
+    if (loginMutation.isError) loginMutation.reset();
+  };
+
+  /*
+    로그인 실패 사유(비활성 계정, 아직 로그인할 수 없는 기간 등)는 백엔드가 날짜까지
+    담아 내려주므로 가공하지 않고 그대로 보여준다.
+  */
   const errorMessage =
     inviteError || (loginMutation.isError ? getApiErrorMessage(loginMutation.error) : undefined);
 
@@ -76,7 +99,10 @@ export function StaffLoginForm({ festivalId, sessionExpired = false }: StaffLogi
             autoComplete="username"
             placeholder="아이디"
             value={loginId}
-            onChange={(event) => setLoginId(event.target.value)}
+            onChange={(event) => {
+              setLoginId(event.target.value);
+              clearErrors();
+            }}
           />
           <Input
             label="비밀번호"
@@ -85,7 +111,10 @@ export function StaffLoginForm({ festivalId, sessionExpired = false }: StaffLogi
             autoComplete="current-password"
             placeholder="비밀번호"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              clearErrors();
+            }}
             errorText={errorMessage}
           />
           <Button
