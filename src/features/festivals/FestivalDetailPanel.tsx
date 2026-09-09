@@ -23,6 +23,13 @@ import {
 } from "./api";
 import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
 import { SearchDialog, type SearchDialogState } from "./SearchDialog";
+import {
+  FESTIVAL_SEARCH_HELPER_ITEMS,
+  FESTIVAL_SEARCH_HELPER_TEXT,
+  findFestivalSearchResult,
+  toDisplayDateOrEmpty,
+  toFestivalSearchDialogResult,
+} from "./seriesSearch";
 import type {
   FestivalLocationRequest,
   FestivalLocationResponse,
@@ -75,10 +82,10 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
 
   function applyFestivalSeries(series: FestivalSeriesSearchResult) {
     setName(series.name);
-    setDescription(series.latestDescription);
-    setDetailAddress(series.latestDetailAddress);
-    setStartDate(toDisplayDate(series.latestStartDate));
-    setEndDate(toDisplayDate(series.latestEndDate));
+    setDescription(series.latestDescription ?? "");
+    setDetailAddress(series.latestDetailAddress ?? "");
+    setStartDate(toDisplayDateOrEmpty(series.latestStartDate));
+    setEndDate(toDisplayDateOrEmpty(series.latestEndDate));
     setFestivalSearchOpen(false);
   }
   const updateMutation = useMutation({
@@ -305,19 +312,15 @@ export function FestivalDetailPanel({ festivalId }: { festivalId: string }) {
         }}
         title="축제 검색"
         placeholder="축제명을 입력해 주세요"
-        helperText="축제명으로 검색하면 이전 축제 정보를 불러올 수 있어요."
-        helperItems={["이미 API에 등록된 축제면 이전 말고 현재 축제 정보를 불러오는지"]}
+        helperText={FESTIVAL_SEARCH_HELPER_TEXT}
+        helperItems={FESTIVAL_SEARCH_HELPER_ITEMS}
         state={festivalSearchState}
-        results={festivalSearchResults.map((series) => ({
-          id: series.seriesId,
-          label: series.name,
-          description: series.latestAddress,
-        }))}
+        results={festivalSearchResults.map(toFestivalSearchDialogResult)}
         searchPending={festivalSearchPending}
         onSearch={searchFestivals}
         noResultSubtext="하단의 직접 입력을 눌러 축제명을 등록해 주세요"
         onSelectResult={(result) => {
-          const series = festivalSearchResults.find((item) => item.seriesId === result.id);
+          const series = findFestivalSearchResult(festivalSearchResults, result.id);
           if (series) applyFestivalSeries(series);
         }}
         onManualInput={(value) => {

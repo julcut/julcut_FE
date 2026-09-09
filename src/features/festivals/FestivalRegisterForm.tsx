@@ -14,7 +14,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormSection } from "@/components/ui/FormSection";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
-import { DATE_DISPLAY_PATTERN, formatDateInput, toDisplayDate, toIsoDate } from "./dateFormat";
+import { DATE_DISPLAY_PATTERN, formatDateInput, toIsoDate } from "./dateFormat";
 import {
   createFestival,
   createFestivalWithMap,
@@ -35,6 +35,13 @@ import {
   type LocationDraft,
 } from "./locationDraft";
 import { SearchDialog, type SearchDialogResult, type SearchDialogState } from "./SearchDialog";
+import {
+  FESTIVAL_SEARCH_HELPER_ITEMS,
+  FESTIVAL_SEARCH_HELPER_TEXT,
+  findFestivalSearchResult,
+  toDisplayDateOrEmpty,
+  toFestivalSearchDialogResult,
+} from "./seriesSearch";
 import { canCreateFestival } from "@/features/auth/admin/types";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -104,20 +111,21 @@ export function FestivalRegisterForm() {
 
   async function applyFestivalSeries(series: FestivalSeriesSearchResult) {
     setName(series.name);
-    setDescription(series.latestDescription);
-    setStartDate(toDisplayDate(series.latestStartDate));
-    setEndDate(toDisplayDate(series.latestEndDate));
+    setDescription(series.latestDescription ?? "");
+    setStartDate(toDisplayDateOrEmpty(series.latestStartDate));
+    setEndDate(toDisplayDateOrEmpty(series.latestEndDate));
     setFestivalSearchOpen(false);
 
-    // 시리즈 검색 결과에는 주소만 있고 좌표가 없다. 주소를 채우면서 좌표도 같이 만들어 둔다.
+    // 검색 결과에는 주소만 있고 좌표가 없다. 주소를 채우면서 좌표도 같이 만들어 둔다.
+    const roadAddress = series.latestAddress ?? "";
     const firstKey = locations[0]?.key;
     setLocations((current) => {
       const [first, ...rest] = current;
       return [
         {
           ...first,
-          roadAddress: series.latestAddress,
-          detailAddress: series.latestDetailAddress,
+          roadAddress,
+          detailAddress: series.latestDetailAddress ?? "",
           latitude: undefined,
           longitude: undefined,
         },
@@ -125,7 +133,8 @@ export function FestivalRegisterForm() {
       ];
     });
 
-    const coordinate = await geocodeAddress(series.latestAddress);
+    if (!roadAddress) return;
+    const coordinate = await geocodeAddress(roadAddress);
     // 여기서 실패해도 막지 않는다. 등록 직전 검증이 다시 시도하고, 그때도 못 찾으면 안내한다.
     if (coordinate && firstKey) updateLocation(firstKey, coordinate);
   }
@@ -451,19 +460,15 @@ export function FestivalRegisterForm() {
         }}
         title="축제 검색"
         placeholder="축제명을 입력해 주세요"
-        helperText="축제명으로 검색하면 이전 축제 정보를 불러올 수 있어요."
-        helperItems={["이미 API에 등록된 축제면 이전 말고 현재 축제 정보를 불러오는지"]}
+        helperText={FESTIVAL_SEARCH_HELPER_TEXT}
+        helperItems={FESTIVAL_SEARCH_HELPER_ITEMS}
         state={festivalSearchState}
-        results={festivalSearchResults.map((series) => ({
-          id: series.seriesId,
-          label: series.name,
-          description: series.latestAddress,
-        }))}
+        results={festivalSearchResults.map(toFestivalSearchDialogResult)}
         searchPending={festivalSearchPending}
         onSearch={searchFestivals}
         noResultSubtext="하단의 직접 입력을 눌러 축제명을 등록해 주세요"
         onSelectResult={(result) => {
-          const series = festivalSearchResults.find((item) => item.seriesId === result.id);
+          const series = findFestivalSearchResult(festivalSearchResults, result.id);
           if (series) void applyFestivalSeries(series);
         }}
         onManualInput={(value) => {
