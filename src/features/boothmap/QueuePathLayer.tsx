@@ -150,18 +150,28 @@ function WaitLabelLayer({ queues }: { queues: QueuePathItem[] }) {
         <CustomOverlayMap
           key={`wait-${queue.queueId}`}
           position={labelPositionOf(queue)}
-          yAnchor={1}
+          xAnchor={0}
+          yAnchor={0}
           zIndex={18}
           clickable={false}
         >
-          <span
-            className={`body-caption mb-1 rounded-full px-2 py-0.5 shadow-sm ${
-              queue.congestionLevel
-                ? LABEL_CLASSES[queue.congestionLevel]
-                : "bg-white text-zinc-950"
-            }`}
-          >
-            {formatWaitMinutes(queue.waitMinutes)}
+          {/*
+            표는 읽기만 하는 것이라 클릭을 받지 않아야 한다. 카카오 오버레이의
+            clickable=false는 지도 조작만 통과시킬 뿐 DOM 클릭은 그대로 막는다. 게다가
+            오버레이가 내용 크기만큼 자리를 차지해, 표에 가려진 부스 마커를 누를 수
+            없었다(부스가 몰린 자리에서는 절반 가까이 눌리지 않았다). 자리를 차지하지 않는
+            0×0 상자에 담고 표는 그 위에 띄운다.
+          */}
+          <span className="pointer-events-none relative block size-0">
+            <span
+              className={`body-caption absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 whitespace-nowrap shadow-sm ${
+                queue.congestionLevel
+                  ? LABEL_CLASSES[queue.congestionLevel]
+                  : "bg-white text-zinc-950"
+              }`}
+            >
+              {formatWaitMinutes(queue.waitMinutes)}
+            </span>
           </span>
         </CustomOverlayMap>
       ))}

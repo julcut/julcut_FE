@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { distanceInMeters } from "@/features/staffMap/utils";
 import { getApiErrorMessage } from "@/lib/api/httpError";
+import { CongestionText } from "@/components/ui/CongestionBadge";
 import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import { updateQueueTailAsAdmin } from "./api";
 import type { Booth, BoothZone } from "./types";
@@ -123,8 +124,13 @@ function BoothQueueUpdateBar({
             <span className="body-small-bold wrap-anywhere text-zinc-950">{booth.name}</span>
           </div>
           <p className="body-caption text-zinc-500">
-            혼잡도 {booth.congestionLevel ?? "미입력"} · 예상 대기시간{" "}
-            {formatWaitMinutes(booth.waitMinutes)}
+            혼잡도{" "}
+            {booth.congestionLevel ? (
+              <CongestionText level={booth.congestionLevel} className="body-caption" />
+            ) : (
+              "미입력"
+            )}{" "}
+            · 예상 대기시간 {formatWaitMinutes(booth.waitMinutes)}
           </p>
         </div>
       </div>

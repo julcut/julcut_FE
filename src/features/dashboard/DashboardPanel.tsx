@@ -35,6 +35,22 @@ import type { Booth, BoothZone } from "./types";
 const BOOTH_MAP_CTA_CLASSES =
   "inline-flex shrink-0 items-center justify-center gap-2.5 rounded-md bg-primary px-4 py-2 body-small text-white transition-colors hover:bg-primary/90";
 
+/*
+  운영 상태를 ONGOING 같은 영문 그대로 보여 주고 있었다. 화면에 그대로 나가는 값이라
+  우리말로 옮긴다. 모르는 값이 오면 감추지 말고 원문을 그대로 둔다.
+*/
+const OPERATING_STATUS_LABEL: Record<string, string> = {
+  PREPARING: "준비 중",
+  ONGOING: "운영 중",
+  PAUSED: "일시 중지",
+  CLOSED: "운영 종료",
+  ENDED: "운영 종료",
+};
+
+function operatingStatusLabel(status: string): string {
+  return OPERATING_STATUS_LABEL[status] ?? status;
+}
+
 export function DashboardPanel({ festivalId }: { festivalId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -298,7 +314,11 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
               ) : null}
             </div>
           }
-          className={`pointer-events-auto col-start-1 row-start-2 min-h-0 w-full lg:row-span-2 lg:row-start-1 lg:flex lg:w-72 ${boothListOpen ? "flex" : "hidden"}`}
+          /*
+            좁은 화면에서는 목록이 뷰포트보다 길어져 뒷부분 부스에 손이 닿지 않았다.
+            높이를 화면에 묶어 두면 패널 안에서 스크롤된다(패널 자체는 overflow-y-auto).
+          */
+          className={`pointer-events-auto col-start-1 row-start-2 max-h-[60vh] min-h-0 w-full lg:row-span-2 lg:row-start-1 lg:flex lg:max-h-full lg:w-72 ${boothListOpen ? "flex" : "hidden"}`}
         />
 
         <div className="col-start-1 row-start-1 flex min-h-0 flex-wrap items-start justify-between gap-3 lg:col-start-2 lg:flex-nowrap lg:justify-end lg:gap-5">
@@ -414,7 +434,7 @@ export function DashboardPanel({ festivalId }: { festivalId: string }) {
                   description="현재 활성 대기열의 평균 대기시간입니다."
                 />
                 <MapMetric
-                  value={dashboard.operatingStatus}
+                  value={operatingStatusLabel(dashboard.operatingStatus)}
                   valueClassName="body-regular-bold"
                   label="운영 상태"
                   description="백엔드에서 제공하는 현재 운영 상태입니다."
