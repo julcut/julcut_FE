@@ -57,10 +57,7 @@ export function StaffFestivalBar({
         <MapMetric
           value={
             busiestBooth ? (
-              <span className="flex min-w-0 items-center gap-1">
-                <span className="text-primary">1</span>
-                <span className="truncate">{busiestBooth.name}</span>
-              </span>
+              <span className="min-w-0 truncate">{busiestBooth.name}</span>
             ) : (
               <span className="body-small text-zinc-400">데이터 없음</span>
             )

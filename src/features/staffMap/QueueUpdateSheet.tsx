@@ -114,18 +114,24 @@ export function QueueUpdateSheet({
   return (
     // 화면설계서 EDIT01: 지도 위에 화면 폭 전체로 올라오는 하단 모달.
     <div className="absolute inset-x-0 bottom-0 z-20 max-h-full overflow-y-auto rounded-t-2xl border-t border-zinc-200 bg-white px-4 pt-3 pb-8 shadow-lg">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 pb-3">
-        <p className="body-regular-bold min-w-0 truncate text-zinc-950">{booth.name}</p>
+      {/* 부스명은 가운데, 닫기는 오른쪽 끝에 둔다. */}
+      <div className="relative flex items-center justify-center border-b border-zinc-200 pb-3">
+        <p className="body-large-bold min-w-0 truncate px-8 text-center text-zinc-950">
+          {booth.name}
+        </p>
         <IconButton
           variant="ghost"
           size="sm"
           aria-label="닫기"
           icon={<Cross2Icon />}
           onClick={onClose}
+          className="absolute top-0 right-0"
+          iconClassName="size-3 [&_svg]:size-3"
         />
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
+      {/* 화면설계서처럼 좌우로 꽉 찬 회색 띠에 담는다(시트 여백을 되돌려 끝까지 채운다). */}
+      <div className="-mx-4 mt-3 flex items-center justify-between bg-zinc-50 px-4 py-2">
         <p className="body-caption text-zinc-500">실시간 혼잡도정보</p>
         <div className="flex items-center gap-1">
           <span className="body-caption text-zinc-500">

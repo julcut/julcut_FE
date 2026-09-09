@@ -1,6 +1,6 @@
 "use client";
 
-import { UpdateIcon } from "@radix-ui/react-icons";
+import { Pencil2Icon } from "@radix-ui/react-icons";
 import { MapMetric } from "@/components/map/MapMetric";
 import { Button } from "@/components/ui/Button";
 import { CongestionText } from "@/components/ui/CongestionBadge";
@@ -33,10 +33,13 @@ export function StaffBoothBar({
         <MapMetric
           value={
             <span className="truncate">
-              {zoneName} &gt; {booth.name}
+              {/* 구역은 거들고 부스 이름이 먼저 읽혀야 한다. */}
+              <span className="body-regular">{zoneName}</span>{" "}
+              <span className="text-[16px] leading-none">&gt;</span>{" "}
+              <span className="body-regular-bold">{booth.name}</span>
             </span>
           }
-          valueClassName="body-small-bold min-w-0"
+          valueClassName="min-w-0 text-zinc-950"
           labelClassName={METRIC_LABEL_CLASSES}
           label="위치"
           description="선택한 부스가 속한 구역과 부스명입니다."
@@ -45,7 +48,9 @@ export function StaffBoothBar({
         <Button
           variant="outline"
           size="sm"
-          icon={<UpdateIcon />}
+          // 아이콘 14px, 아이콘–글자 간격 4, 안쪽 여백 좌우 16·상하 7.5.
+          className="gap-1 px-4 py-[7.5px] [&_svg]:size-3.5"
+          icon={<Pencil2Icon />}
           disabled={Boolean(disabledReason)}
           title={disabledReason ?? undefined}
           onClick={onUpdateQueue}
