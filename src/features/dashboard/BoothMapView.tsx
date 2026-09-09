@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Map, CustomOverlayMap, Polygon } from "react-kakao-maps-sdk";
 import { Cross2Icon } from "@radix-ui/react-icons";
+import { CongestionText } from "@/components/ui/CongestionBadge";
 import { IconButton } from "@/components/ui/IconButton";
 import { formatWaitMinutes } from "@/lib/formatWaitMinutes";
 import { useKakaoMapLoader } from "@/lib/kakaoMapLoader";
@@ -43,7 +44,12 @@ function BoothPopup({ booth, onClose }: { booth: Booth; onClose: () => void }) {
 
         <div className="mt-3 rounded-md bg-zinc-100 px-3 py-2">
           <p className="body-small-bold text-zinc-950">
-            혼잡도 {booth.congestionLevel ?? "미입력"}
+            혼잡도{" "}
+            {booth.congestionLevel ? (
+              <CongestionText level={booth.congestionLevel} className="body-small-bold" />
+            ) : (
+              "미입력"
+            )}
           </p>
           <p className="body-caption text-zinc-500">
             예상 대기시간 {formatWaitMinutes(booth.waitMinutes)}
