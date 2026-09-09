@@ -21,6 +21,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   const accountKind = useAdminAuthStore((state) => state.session?.admin.accountKind);
   const hideNav = useConsoleUiStore((state) => state.hideNav);
   const fullBleed = useConsoleUiStore((state) => state.fullBleed);
+  const toastBelowActionBar = useConsoleUiStore((state) => state.toastBelowActionBar);
   const pathname = usePathname();
   const params = useParams<{ festivalId?: string }>();
   const festivalId = params?.festivalId;
@@ -78,11 +79,21 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       {/*
         알림은 맥 알림처럼 상단바 바로 아래 오른쪽 위에 뜬다. 기본값으로 두면
         상단바에 걸쳐 가리므로, HeaderNav가 알려 주는 --console-topbar-height만큼 내린다.
+
+        부스맵 편집기처럼 오른쪽 위에 액션 바를 띄우는 화면은 알림이 «저장하기»를
+        덮어 클릭까지 막았다. 그런 화면이 --console-toast-gap으로 더 내려 달라고
+        말할 수 있게 두고, 기본값은 지금까지와 같은 여백을 유지한다.
       */}
       <Toaster
         position="top-right"
-        offset={{ top: "calc(var(--console-topbar-height, 72px) + 16px)", right: "32px" }}
-        mobileOffset={{ top: "calc(var(--console-topbar-height, 72px) + 12px)", right: "16px" }}
+        offset={{
+          top: `calc(var(--console-topbar-height, 72px) + ${toastBelowActionBar ? "96px" : "16px"})`,
+          right: "32px",
+        }}
+        mobileOffset={{
+          top: `calc(var(--console-topbar-height, 72px) + ${toastBelowActionBar ? "120px" : "12px"})`,
+          right: "16px",
+        }}
       />
     </AdminAuthGuard>
   );
